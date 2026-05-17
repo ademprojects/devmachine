@@ -18,6 +18,7 @@ devmachine_pyenv_mirror_url: "{{ devmachine_nexus_base_url }}/pyenv-mirror/"
 devmachine_pip_index_url: "{{ devmachine_nexus_base_url }}/pypi/simple/"
 
 devmachine_target_user: "{{ ansible_user_id }}"
+devmachine_target_group: ""
 devmachine_user_home: ""
 
 devmachine_java_packages:
