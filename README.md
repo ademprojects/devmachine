@@ -89,6 +89,8 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_ansible_login_user`
 - `devmachine_ansible_login_ssh_key_path`
 - `devmachine_ansible_login_ssh_key_passphrase`
+- `devmachine_ansible_login_ssh_key_vault_file`
+- `devmachine_ansible_login_ssh_key_vault_password_file`
 - `devmachine_vscode_sha256`
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
@@ -133,8 +135,13 @@ devmachine_target_users:
 ansible-playbook playbooks/devmachine.yml
 ```
 
-Beispiel mit passwortgeschütztem neuem SSH-Key für den Login-User `ansible`:
+Beispiel mit Vault-Bootstrap für den passwortgeschützten SSH-Key des Login-Users `ansible`:
 
 ```bash
-ansible-playbook playbooks/devmachine.yml -e devmachine_ansible_login_ssh_key_passphrase='STRONG_PASSPHRASE'
+export ANSIBLE_VAULT_PASSWORD_FILE=~/.ansible/.vault-pass.txt
+ansible-playbook playbooks/devmachine.yml
 ```
+
+Beim ersten Lauf wird der lokale SSH-Key unter `devmachine_ansible_login_ssh_key_path` erzeugt
+(falls er noch nicht existiert) und anschließend verschlüsselt in
+`devmachine_ansible_login_ssh_key_vault_file` abgelegt (inklusive Passphrase und Private Key).
