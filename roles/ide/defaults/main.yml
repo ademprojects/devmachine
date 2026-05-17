@@ -24,9 +24,8 @@ devmachine_npm_registry_url: "{{ devmachine_nexus_base_url }}/npm-group/"
 devmachine_pyenv_mirror_url: "{{ devmachine_nexus_base_url }}/pyenv-mirror/"
 devmachine_pip_index_url: "{{ devmachine_nexus_base_url }}/pypi/simple/"
 
-devmachine_target_user: ""
-devmachine_target_group: ""
-devmachine_user_home: ""
+devmachine_target_users: []
+devmachine_sudo_nopasswd: true
 devmachine_workspace_setup_enabled: true
 devmachine_workspace_root: /mnt/devdata/workspaces
 devmachine_workspace_link_name: work

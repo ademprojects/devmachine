@@ -72,9 +72,8 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_npm_registry_url`
 - `devmachine_pyenv_mirror_url`
 - `devmachine_pip_index_url`
-- `devmachine_target_user`
-- `devmachine_target_group`
-- `devmachine_user_home`
+- `devmachine_target_users`
+- `devmachine_sudo_nopasswd`
 - `devmachine_workspace_setup_enabled`
 - `devmachine_workspace_root`
 - `devmachine_workspace_link_name`
@@ -92,28 +91,40 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
 
-Important: set `devmachine_target_user` explicitly to a real developer account (not `runner`).
+Important: `devmachine_target_users` must be set to a non-empty list of real developer accounts (not `runner`).
+Each listed user receives their own workspace, VS Code extensions, tool configuration, and — when
+`devmachine_sudo_nopasswd: true` (default) — a passwordless sudo entry in `/etc/sudoers.d/`.
 
 Workspace Defaults:
 
-- For `devmachine_target_user`, a workspace is created under `{{ devmachine_workspace_root }}/{{ devmachine_target_user }}`.
-- A symlink `~/{{ devmachine_workspace_link_name }}` is created by default in the target user's home directory.
+- For each user in `devmachine_target_users`, a workspace is created under `{{ devmachine_workspace_root }}/{{ username }}`.
+- A symlink `~/{{ devmachine_workspace_link_name }}` is created in every target user's home directory.
+- The shared workspace (if enabled) is set up once, owned by the first user in the list unless `devmachine_shared_workspace_owner` is overridden.
 - Optionally, a general user (default name `devuser`) can be created (`devmachine_general_user_enabled: true`).
-- Optionally, a shared area can be created at `devmachine_shared_workspace_path` (`devmachine_shared_workspace_enabled: true`).
 - Note: Override the default user `devuser` via `devmachine_general_user` if needed to avoid naming conflicts.
 
 ## Ausführung
 
-Lokaler Host:
+Lokaler Host (ein User):
 
 ```bash
-ansible-playbook playbooks/devmachine.yml -e target_hosts=localhost -e devmachine_target_user=developer1
+ansible-playbook playbooks/devmachine.yml \
+  -e target_hosts=localhost \
+  -e '{"devmachine_target_users": ["priad11-ext"]}'
 ```
 
-Remote-Hosts aus der Gruppe `devmachines`:
+Remote-Hosts aus der Gruppe `devmachines` mit mehreren Usern (empfohlen: `host_vars` oder Gruppenvar):
+
+```yaml
+# inventory/host_vars/myserver.yml
+devmachine_target_users:
+  - priad11-ext
+  - jdoe
+  - msmith
+```
 
 ```bash
-ansible-playbook playbooks/devmachine.yml -e devmachine_target_user=developer1
+ansible-playbook playbooks/devmachine.yml
 ```
 
 Beispiel mit passwortgeschütztem neuem SSH-Key für den Login-User `ansible`:
