@@ -305,12 +305,15 @@
   ansible.builtin.assert:
     that:
       - devmachine_installed_vscode_extensions.rc == 0
-    fail_msg: "Failed to list VS Code extensions for {{ devmachine_target_user }}."
+    fail_msg: >-
+      Failed to list VS Code extensions for {{ devmachine_target_user }}.
+      stdout={{ devmachine_installed_vscode_extensions.stdout | default('') | trim }}
+      stderr={{ devmachine_installed_vscode_extensions.stderr | default('') | trim }}
     success_msg: "Installed VS Code extensions were read successfully."
 
 - name: Normalize installed VS Code extension IDs
   ansible.builtin.set_fact:
-    devmachine_installed_vscode_extensions_lowercase: "{{ devmachine_installed_vscode_extensions.stdout_lines | map('lower') | list }}"
+    devmachine_installed_extensions_norm: "{{ devmachine_installed_vscode_extensions.stdout_lines | map('lower') | list }}"
 
 - name: Install VS Code extensions from local VSIX packages
   ansible.builtin.command:
@@ -320,7 +323,7 @@
   environment:
     HOME: "{{ devmachine_effective_user_home }}"
   loop: "{{ devmachine_vscode_extensions }}"
-  when: (item.id | lower) not in devmachine_installed_vscode_extensions_lowercase
+  when: (item.id | lower) not in devmachine_installed_extensions_norm
   changed_when: true
 
 - name: Configure npm registry to Nexus
