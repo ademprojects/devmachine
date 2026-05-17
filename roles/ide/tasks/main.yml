@@ -296,6 +296,10 @@
   register: devmachine_installed_vscode_extensions
   changed_when: false
 
+- name: Normalize installed VS Code extension IDs
+  ansible.builtin.set_fact:
+    devmachine_installed_vscode_extensions_lowercase: "{{ devmachine_installed_vscode_extensions.stdout_lines | map('lower') | list }}"
+
 - name: Install VS Code extensions from local VSIX packages
   ansible.builtin.command:
     cmd: "code --install-extension {{ devmachine_package_dir }}/{{ item.filename }}"
@@ -304,7 +308,7 @@
   environment:
     HOME: "{{ devmachine_effective_user_home }}"
   loop: "{{ devmachine_vscode_extensions }}"
-  when: (item.id | lower) not in (devmachine_installed_vscode_extensions.stdout_lines | map('lower') | list)
+  when: (item.id | lower) not in devmachine_installed_vscode_extensions_lowercase
   changed_when: true
 
 - name: Configure npm registry to Nexus
