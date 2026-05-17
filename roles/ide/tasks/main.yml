@@ -287,7 +287,9 @@
   ansible.builtin.assert:
     that:
       - devmachine_vscode_cli_path.rc == 0
-    fail_msg: "VS Code CLI ('code') is not available in PATH after VS Code installation."
+    fail_msg: >-
+      VS Code CLI ('code') is not available in PATH for user {{ devmachine_target_user }} after VS Code installation.
+      Verify that VS Code RPM installation completed successfully and that the user's shell PATH is up to date.
     success_msg: "VS Code CLI is available."
 
 - name: List installed VS Code extensions for target user
@@ -324,7 +326,6 @@
     HOME: "{{ devmachine_effective_user_home }}"
   loop: "{{ devmachine_vscode_extensions }}"
   when: (item.id | lower) not in devmachine_installed_extensions_norm
-  changed_when: true
 
 - name: Configure npm registry to Nexus
   ansible.builtin.copy:
