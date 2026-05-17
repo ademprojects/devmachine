@@ -27,7 +27,7 @@ scp ./downloads/* user@rhel96:/opt/devmachine/packages/
 
 ## Konfiguration
 
-Standardwerte stehen in `/home/runner/work/devmachine/devmachine/roles/devmachine/defaults/main.yml` und können via `-e` überschrieben werden, z. B.:
+Standardwerte stehen in `roles/devmachine/defaults/main.yml` und können via `-e` überschrieben werden, z. B.:
 
 - `devmachine_nexus_base_url`
 - `devmachine_dnf_repo_url`
@@ -41,11 +41,11 @@ Standardwerte stehen in `/home/runner/work/devmachine/devmachine/roles/devmachin
 Lokaler Host:
 
 ```bash
-ansible-playbook /home/runner/work/devmachine/devmachine/playbooks/devmachine.yml -i /home/runner/work/devmachine/devmachine/inventory.ini -e target_hosts=localhost
+ansible-playbook playbooks/devmachine.yml -e target_hosts=localhost
 ```
 
 Remote-Hosts aus der Gruppe `devmachines`:
 
 ```bash
-ansible-playbook /home/runner/work/devmachine/devmachine/playbooks/devmachine.yml -i /home/runner/work/devmachine/devmachine/inventory.ini
+ansible-playbook playbooks/devmachine.yml
 ```
