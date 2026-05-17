@@ -64,6 +64,8 @@ Die Rolle `ide` kopiert die Dateien dann auf die Zielhosts und installiert VS Co
 
 Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` überschrieben werden, z. B.:
 
+- `devmachine_nexus_fqdn`
+- `devmachine_proxy_fqdn`
 - `devmachine_nexus_base_url`
 - `devmachine_local_package_dir`
 - `devmachine_dnf_repo_url`
@@ -90,6 +92,9 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_vscode_sha256`
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
+
+Empfohlen: nur `devmachine_nexus_fqdn` und `devmachine_proxy_fqdn` pro Server setzen; die übrigen
+Nexus-/Proxy-URLs werden standardmäßig daraus abgeleitet.
 
 Important: `devmachine_target_users` must be set to a non-empty list of real developer accounts (not `runner`).
 Each listed user receives their own workspace, VS Code extensions, tool configuration, and — when
