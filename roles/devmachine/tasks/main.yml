@@ -34,16 +34,29 @@
         else (devmachine_passwd_entry.stdout.split(':')[5])
       }}
 
+- name: Read target user primary group
+  ansible.builtin.command: "id -gn {{ devmachine_target_user }}"
+  register: devmachine_primary_group
+  changed_when: false
+  when: devmachine_target_group | length == 0
+
+- name: Determine effective target group
+  ansible.builtin.set_fact:
+    devmachine_effective_target_group: >-
+      {{
+        devmachine_target_group
+        if (devmachine_target_group | length > 0)
+        else (devmachine_primary_group.stdout)
+      }}
+
 - name: Check VS Code package presence
   ansible.builtin.stat:
     path: "{{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
-    checksum_algorithm: sha256
   register: devmachine_vscode_stat
 
 - name: Check IntelliJ archive presence
   ansible.builtin.stat:
     path: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
-    checksum_algorithm: sha256
   register: devmachine_intellij_stat
 
 - name: Fail when VS Code package is missing
@@ -57,16 +70,30 @@
   when: not devmachine_intellij_stat.stat.exists
 
 - name: Validate VS Code checksum when provided
+  ansible.builtin.stat:
+    path: "{{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
+    checksum_algorithm: sha256
+  register: devmachine_vscode_checksum_stat
+  when: devmachine_vscode_sha256 | length > 0
+
+- name: Validate VS Code checksum when provided
   ansible.builtin.assert:
     that:
-      - devmachine_vscode_stat.stat.checksum == devmachine_vscode_sha256
+      - devmachine_vscode_checksum_stat.stat.checksum == devmachine_vscode_sha256
     fail_msg: "VS Code checksum mismatch for {{ devmachine_vscode_rpm }}"
   when: devmachine_vscode_sha256 | length > 0
 
 - name: Validate IntelliJ checksum when provided
+  ansible.builtin.stat:
+    path: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
+    checksum_algorithm: sha256
+  register: devmachine_intellij_checksum_stat
+  when: devmachine_intellij_sha256 | length > 0
+
+- name: Validate IntelliJ checksum when provided
   ansible.builtin.assert:
     that:
-      - devmachine_intellij_stat.stat.checksum == devmachine_intellij_sha256
+      - devmachine_intellij_checksum_stat.stat.checksum == devmachine_intellij_sha256
     fail_msg: "IntelliJ checksum mismatch for {{ devmachine_intellij_archive }}"
   when: devmachine_intellij_sha256 | length > 0
 
@@ -133,7 +160,7 @@
     content: |
       registry={{ devmachine_npm_registry_url }}
     owner: "{{ devmachine_target_user }}"
-    group: "{{ devmachine_target_user }}"
+    group: "{{ devmachine_effective_target_group }}"
     mode: "0644"
 
 - name: Ensure pip config directory exists
@@ -141,7 +168,7 @@
     path: "{{ devmachine_effective_user_home }}/.pip"
     state: directory
     owner: "{{ devmachine_target_user }}"
-    group: "{{ devmachine_target_user }}"
+    group: "{{ devmachine_effective_target_group }}"
     mode: "0755"
 
 - name: Configure pip index to Nexus
@@ -151,7 +178,7 @@
       [global]
       index-url = {{ devmachine_pip_index_url }}
     owner: "{{ devmachine_target_user }}"
-    group: "{{ devmachine_target_user }}"
+    group: "{{ devmachine_effective_target_group }}"
     mode: "0644"
 
 - name: Ensure pyenv directory exists
@@ -159,7 +186,7 @@
     path: "{{ devmachine_effective_user_home }}/.pyenv"
     state: directory
     owner: "{{ devmachine_target_user }}"
-    group: "{{ devmachine_target_user }}"
+    group: "{{ devmachine_effective_target_group }}"
     mode: "0755"
 
 - name: Configure pyenv and Nexus environment defaults

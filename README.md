@@ -37,6 +37,7 @@ Standardwerte stehen in `roles/devmachine/defaults/main.yml` und können via `-e
 - `devmachine_pyenv_mirror_url`
 - `devmachine_pip_index_url`
 - `devmachine_target_user`
+- `devmachine_target_group`
 - `devmachine_user_home`
 - `devmachine_vscode_sha256`
 - `devmachine_intellij_sha256`
