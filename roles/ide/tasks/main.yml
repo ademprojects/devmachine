@@ -270,9 +270,16 @@
 
 - name: Ensure VS Code CLI is available
   ansible.builtin.command:
-    cmd: command -v code
+    cmd: which code
   register: devmachine_vscode_cli_path
   changed_when: false
+  failed_when: false
+
+- name: Fail when VS Code CLI is unavailable
+  ansible.builtin.assert:
+    that:
+      - devmachine_vscode_cli_path.rc == 0
+    fail_msg: "VS Code CLI ('code') is not available in PATH after VS Code installation."
 
 - name: List installed VS Code extensions for target user
   ansible.builtin.command:
@@ -293,7 +300,6 @@
     HOME: "{{ devmachine_effective_user_home }}"
   loop: "{{ devmachine_vscode_extensions }}"
   when: item.id not in devmachine_installed_vscode_extensions.stdout_lines
-  changed_when: "'already installed' not in (((stdout | default('')) ~ (stderr | default(''))) | lower)"
 
 - name: Configure npm registry to Nexus
   ansible.builtin.copy:
