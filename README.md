@@ -11,7 +11,7 @@ Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 
 - Steuerrechner mit Ansible
 - Zielsystem(e): RHEL 9.6
-- VS Code RPM und IntelliJ tar.gz wurden vorab per `scp` nach `/opt/devmachine/packages` kopiert
+- VS Code RPM und IntelliJ tar.gz wurden vorab auf den Steuerrechner kopiert (Standard: `./packages`)
 
 ## Linux-Pakete per PowerShell herunterladen
 
@@ -19,17 +19,22 @@ Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 pwsh -File ./tools/download-linux-ide-packages.ps1 -OutputDirectory ./downloads
 ```
 
-Danach Dateien z. B. so auf das Zielsystem kopieren:
+Danach Dateien explizit auf den Steuerrechner legen:
 
 ```bash
-scp ./downloads/* user@rhel96:/opt/devmachine/packages/
+mkdir -p ./packages
+cp ./downloads/code-latest.x86_64.rpm ./packages/
+cp ./downloads/ideaIC-latest.tar.gz ./packages/
 ```
+
+Die Rolle `ide` kopiert die Dateien dann auf die Zielhosts und installiert sie dort.
 
 ## Konfiguration
 
-Standardwerte stehen in `roles/devmachine/defaults/main.yml` und können via `-e` überschrieben werden, z. B.:
+Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` überschrieben werden, z. B.:
 
 - `devmachine_nexus_base_url`
+- `devmachine_local_package_dir`
 - `devmachine_dnf_repo_url`
 - `devmachine_dnf_gpgcheck`
 - `devmachine_dnf_gpgkey`
@@ -39,6 +44,9 @@ Standardwerte stehen in `roles/devmachine/defaults/main.yml` und können via `-e
 - `devmachine_target_user`
 - `devmachine_target_group`
 - `devmachine_user_home`
+- `devmachine_ansible_login_user`
+- `devmachine_ansible_login_ssh_key_path`
+- `devmachine_ansible_login_ssh_key_passphrase`
 - `devmachine_vscode_sha256`
 - `devmachine_intellij_sha256`
 
@@ -54,4 +62,10 @@ Remote-Hosts aus der Gruppe `devmachines`:
 
 ```bash
 ansible-playbook playbooks/devmachine.yml
+```
+
+Beispiel mit passwortgeschütztem neuem SSH-Key für den Login-User `ansible`:
+
+```bash
+ansible-playbook playbooks/devmachine.yml -e devmachine_ansible_login_ssh_key_passphrase='STRONG_PASSPHRASE'
 ```
