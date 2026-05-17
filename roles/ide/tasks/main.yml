@@ -270,11 +270,7 @@
 
 - name: Ensure VS Code CLI is available
   ansible.builtin.command:
-    argv:
-      - /usr/bin/env
-      - bash
-      - -lc
-      - command -v code
+    cmd: /usr/bin/code --version
   become: true
   become_user: "{{ devmachine_target_user }}"
   environment:
@@ -315,7 +311,7 @@
 
 - name: Normalize installed VS Code extension IDs
   ansible.builtin.set_fact:
-    devmachine_installed_extensions_norm: "{{ devmachine_installed_vscode_extensions.stdout_lines | map('lower') | list }}"
+    devmachine_installed_extensions_lowercase: "{{ devmachine_installed_vscode_extensions.stdout_lines | map('lower') | list }}"
 
 - name: Install VS Code extensions from local VSIX packages
   ansible.builtin.command:
@@ -325,7 +321,7 @@
   environment:
     HOME: "{{ devmachine_effective_user_home }}"
   loop: "{{ devmachine_vscode_extensions }}"
-  when: (item.id | lower) not in devmachine_installed_extensions_norm
+  when: (item.id | lower) not in devmachine_installed_extensions_lowercase
 
 - name: Configure npm registry to Nexus
   ansible.builtin.copy:
