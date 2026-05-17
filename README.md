@@ -45,6 +45,7 @@ pwsh -File ./tools/download-linux-ide-packages.ps1 `
 ```
 
 Hinweis: Für Produktion nach der Initialphase bevorzugt per SSH-Key und dediziertem User statt `root`+Passwort arbeiten.
+Wenn `-ScpPassword` genutzt wird, nutzt `sshpass` intern die Umgebungsvariable `SSHPASS` während des Uploads.
 
 Danach Dateien explizit auf den Steuerrechner legen:
 
