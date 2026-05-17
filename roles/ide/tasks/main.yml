@@ -75,6 +75,15 @@
   become: false
   run_once: true
 
+- name: Check local VS Code extension package presence
+  ansible.builtin.stat:
+    path: "{{ devmachine_local_package_dir }}/{{ item.filename }}"
+  register: devmachine_local_vscode_extension_stats
+  loop: "{{ devmachine_vscode_extensions }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
 - name: Fail when local VS Code package is missing
   ansible.builtin.fail:
     msg: "VS Code RPM not found at {{ devmachine_local_package_dir }}/{{ devmachine_vscode_rpm }}"
@@ -85,6 +94,13 @@
   ansible.builtin.fail:
     msg: "IntelliJ archive not found at {{ devmachine_local_package_dir }}/{{ devmachine_intellij_archive }}"
   when: not devmachine_local_intellij_stat.stat.exists
+  run_once: true
+
+- name: Fail when local VS Code extension package is missing
+  ansible.builtin.fail:
+    msg: "VS Code extension package not found at {{ devmachine_local_package_dir }}/{{ item.item.filename }}"
+  when: not item.stat.exists
+  loop: "{{ devmachine_local_vscode_extension_stats.results }}"
   run_once: true
 
 - name: Copy VS Code package to remote host
@@ -98,6 +114,13 @@
     src: "{{ devmachine_local_package_dir }}/{{ devmachine_intellij_archive }}"
     dest: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
     mode: "0644"
+
+- name: Copy VS Code extension packages to remote host
+  ansible.builtin.copy:
+    src: "{{ devmachine_local_package_dir }}/{{ item.filename }}"
+    dest: "{{ devmachine_package_dir }}/{{ item.filename }}"
+    mode: "0644"
+  loop: "{{ devmachine_vscode_extensions }}"
 
 - name: Read VS Code checksum when provided
   ansible.builtin.stat:
@@ -244,6 +267,26 @@
         if (devmachine_user_home | length > 0)
         else (ansible_facts.getent_passwd[devmachine_target_user][4])
       }}
+
+- name: List installed VS Code extensions for target user
+  ansible.builtin.command:
+    cmd: code --list-extensions
+  become: true
+  become_user: "{{ devmachine_target_user }}"
+  environment:
+    HOME: "{{ devmachine_effective_user_home }}"
+  register: devmachine_installed_vscode_extensions
+  changed_when: false
+
+- name: Install VS Code extensions from local VSIX packages
+  ansible.builtin.command:
+    cmd: "code --install-extension {{ devmachine_package_dir }}/{{ item.filename }}"
+  become: true
+  become_user: "{{ devmachine_target_user }}"
+  environment:
+    HOME: "{{ devmachine_effective_user_home }}"
+  loop: "{{ devmachine_vscode_extensions }}"
+  when: item.id not in devmachine_installed_vscode_extensions.stdout_lines
 
 - name: Configure npm registry to Nexus
   ansible.builtin.copy:

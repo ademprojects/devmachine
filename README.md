@@ -3,6 +3,7 @@
 Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 
 - VS Code (Linux RPM aus lokal kopierter Datei)
+- VS Code Extensions für Ansible und Python (lokale VSIX-Dateien)
 - IntelliJ IDEA (Linux tar.gz aus lokal kopierter Datei)
 - Java-Entwicklungspaketen über ein Nexus-Repository
 - Nexus-Konfiguration für `npm` und `pyenv`/`pip`
@@ -53,9 +54,11 @@ Danach Dateien explizit auf den Steuerrechner legen:
 mkdir -p ./packages
 cp ./downloads/code-latest.x86_64.rpm ./packages/
 cp ./downloads/ideaIC-latest.tar.gz ./packages/
+cp ./downloads/redhat.ansible.vsix ./packages/
+cp ./downloads/ms-python.python.vsix ./packages/
 ```
 
-Die Rolle `ide` kopiert die Dateien dann auf die Zielhosts und installiert sie dort.
+Die Rolle `ide` kopiert die Dateien dann auf die Zielhosts und installiert VS Code, IntelliJ sowie die VS Code-Extensions dort.
 
 ## Konfiguration
 
@@ -76,6 +79,7 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_ansible_login_ssh_key_path`
 - `devmachine_ansible_login_ssh_key_passphrase`
 - `devmachine_vscode_sha256`
+- `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
 
 ## Ausführung
