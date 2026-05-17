@@ -93,7 +93,8 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 
 Important: `devmachine_target_users` must be set to a non-empty list of real developer accounts (not `runner`).
 Each listed user receives their own workspace, VS Code extensions, tool configuration, and — when
-`devmachine_sudo_nopasswd: true` (default) — a passwordless sudo entry in `/etc/sudoers.d/`.
+`devmachine_sudo_nopasswd: true` — a passwordless sudo entry in `/etc/sudoers.d/`.
+Passwordless sudo is **disabled by default**; set `devmachine_sudo_nopasswd: true` to enable it explicitly.
 
 Workspace Defaults:
 

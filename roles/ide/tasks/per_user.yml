@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - devmachine_loop_user | length > 0
-      - devmachine_loop_user != 'runner'
+      - devmachine_loop_user | lower != 'runner'
       - devmachine_loop_user is match('^[a-z_](?:[a-z0-9_-]*[a-z0-9_])?$')
     fail_msg: >-
       devmachine_target_users entry '{{ devmachine_loop_user }}' is invalid.
@@ -195,5 +195,5 @@
     owner: root
     group: root
     mode: "0440"
-    validate: "visudo -cf %s"
+    validate: "/usr/sbin/visudo -cf %s"
   when: devmachine_sudo_nopasswd | bool
