@@ -1,0 +1,118 @@
+---
+- name: Ensure package directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_package_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Configure Nexus as DNF repository
+  ansible.builtin.yum_repository:
+    name: "{{ devmachine_dnf_repo_name }}"
+    description: "{{ devmachine_dnf_repo_description }}"
+    baseurl: "{{ devmachine_dnf_repo_url }}"
+    enabled: true
+    gpgcheck: false
+
+- name: Install Java development packages
+  ansible.builtin.dnf:
+    name: "{{ devmachine_java_packages }}"
+    state: present
+
+- name: Check VS Code package presence
+  ansible.builtin.stat:
+    path: "{{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
+  register: devmachine_vscode_stat
+
+- name: Check IntelliJ archive presence
+  ansible.builtin.stat:
+    path: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
+  register: devmachine_intellij_stat
+
+- name: Fail when VS Code package is missing
+  ansible.builtin.fail:
+    msg: "VS Code RPM not found at {{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
+  when: not devmachine_vscode_stat.stat.exists
+
+- name: Fail when IntelliJ archive is missing
+  ansible.builtin.fail:
+    msg: "IntelliJ archive not found at {{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
+  when: not devmachine_intellij_stat.stat.exists
+
+- name: Install VS Code from local RPM
+  ansible.builtin.dnf:
+    name: "{{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
+    state: present
+    disable_gpg_check: true
+
+- name: Ensure IntelliJ install directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_intellij_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Extract IntelliJ archive
+  ansible.builtin.unarchive:
+    src: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
+    dest: "{{ devmachine_intellij_install_dir }}"
+    remote_src: true
+
+- name: Find extracted IntelliJ directory
+  ansible.builtin.find:
+    paths: "{{ devmachine_intellij_install_dir }}"
+    file_type: directory
+    patterns: "idea-*"
+    recurse: false
+  register: devmachine_intellij_dirs
+
+- name: Set IntelliJ home
+  ansible.builtin.set_fact:
+    devmachine_intellij_home: "{{ (devmachine_intellij_dirs.files | sort(attribute='mtime', reverse=true) | first).path }}"
+  when: devmachine_intellij_dirs.matched | int > 0
+
+- name: Fail when IntelliJ extraction did not produce expected directory
+  ansible.builtin.fail:
+    msg: "No extracted IntelliJ directory found in {{ devmachine_intellij_install_dir }}"
+  when: devmachine_intellij_dirs.matched | int == 0
+
+- name: Symlink IntelliJ launcher
+  ansible.builtin.file:
+    src: "{{ devmachine_intellij_home }}/bin/idea.sh"
+    dest: "{{ devmachine_intellij_symlink }}"
+    state: link
+    force: true
+
+- name: Configure npm registry to Nexus
+  ansible.builtin.copy:
+    dest: "{{ devmachine_user_home }}/.npmrc"
+    content: |
+      registry={{ devmachine_npm_registry_url }}
+      always-auth=true
+    owner: "{{ devmachine_target_user }}"
+    group: "{{ devmachine_target_user }}"
+    mode: "0644"
+
+- name: Configure pip index to Nexus
+  ansible.builtin.copy:
+    dest: /etc/pip.conf
+    content: |
+      [global]
+      index-url = {{ devmachine_pip_index_url }}
+    mode: "0644"
+
+- name: Ensure pyenv directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_user_home }}/.pyenv"
+    state: directory
+    owner: "{{ devmachine_target_user }}"
+    group: "{{ devmachine_target_user }}"
+    mode: "0755"
+
+- name: Configure pyenv and Nexus environment defaults
+  ansible.builtin.copy:
+    dest: /etc/profile.d/devmachine-nexus.sh
+    mode: "0644"
+    content: |
+      export PYENV_ROOT="{{ devmachine_user_home }}/.pyenv"
+      export PATH="$PYENV_ROOT/bin:$PATH"
+      export PYTHON_BUILD_MIRROR_URL="{{ devmachine_pyenv_mirror_url }}"
+      export PIP_INDEX_URL="{{ devmachine_pip_index_url }}"
