@@ -159,6 +159,11 @@
     gpgcheck: "{{ devmachine_dnf_gpgcheck }}"
     gpgkey: "{{ devmachine_dnf_gpgkey if (devmachine_dnf_gpgkey | length > 0) else omit }}"
 
+- name: Update all system packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+
 - name: Install Java development packages
   ansible.builtin.dnf:
     name: "{{ devmachine_java_packages }}"
