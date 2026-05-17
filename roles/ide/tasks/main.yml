@@ -118,35 +118,46 @@
   become: false
   run_once: true
 
-- name: Build ansible login key vault source file
-  ansible.builtin.copy:
-    dest: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
-    mode: "0600"
-    content: "{{ {'devmachine_ansible_login_ssh_key_passphrase': devmachine_ansible_login_ssh_key_passphrase_effective, 'devmachine_ansible_login_private_key': lookup('file', devmachine_ansible_login_ssh_key_path)} | to_nice_yaml(indent=2) }}"
+- name: Prepare ansible login key vault payload
+  ansible.builtin.set_fact:
+    devmachine_ansible_login_key_vault_payload:
+      devmachine_ansible_login_ssh_key_passphrase: "{{ devmachine_ansible_login_ssh_key_passphrase_effective }}"
+      devmachine_ansible_login_private_key: "{{ lookup('file', devmachine_ansible_login_ssh_key_path) }}"
   delegate_to: localhost
   become: false
   run_once: true
   no_log: true
 
-- name: Encrypt ansible login key vault source file
-  ansible.builtin.command:
-    argv:
-      - ansible-vault
-      - encrypt
-      - --vault-password-file
-      - "{{ devmachine_ansible_login_ssh_key_vault_password_file }}"
-      - --output
-      - "{{ devmachine_ansible_login_ssh_key_vault_file }}"
-      - "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
-  delegate_to: localhost
-  become: false
-  run_once: true
-  no_log: true
+- name: Write encrypted ansible login key vault file
+  block:
+    - name: Build ansible login key vault source file
+      ansible.builtin.copy:
+        dest: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+        mode: "0600"
+        content: "{{ devmachine_ansible_login_key_vault_payload | to_nice_yaml(indent=2) }}"
+      no_log: true
 
-- name: Remove ansible login key vault temporary file
-  ansible.builtin.file:
-    path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
-    state: absent
+    - name: Remove existing ansible login key vault file
+      ansible.builtin.file:
+        path: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+        state: absent
+
+    - name: Encrypt ansible login key vault source file
+      ansible.builtin.command:
+        argv:
+          - ansible-vault
+          - encrypt
+          - --vault-password-file
+          - "{{ devmachine_ansible_login_ssh_key_vault_password_file }}"
+          - --output
+          - "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+          - "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+      no_log: true
+  always:
+    - name: Remove ansible login key vault temporary file
+      ansible.builtin.file:
+        path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+        state: absent
   delegate_to: localhost
   become: false
   run_once: true
