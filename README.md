@@ -75,12 +75,28 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_target_user`
 - `devmachine_target_group`
 - `devmachine_user_home`
+- `devmachine_workspace_setup_enabled`
+- `devmachine_workspace_root`
+- `devmachine_workspace_link_name`
+- `devmachine_shared_workspace_enabled`
+- `devmachine_shared_workspace_path`
+- `devmachine_shared_workspace_owner`
+- `devmachine_shared_workspace_group`
+- `devmachine_general_user_enabled`
+- `devmachine_general_user`
 - `devmachine_ansible_login_user`
 - `devmachine_ansible_login_ssh_key_path`
 - `devmachine_ansible_login_ssh_key_passphrase`
 - `devmachine_vscode_sha256`
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
+
+Workspace-Defaults:
+
+- Für `devmachine_target_user` wird ein Workspace unter `{{ devmachine_workspace_root }}/{{ devmachine_target_user }}` angelegt.
+- Im Home-Verzeichnis des Zielusers wird standardmäßig ein Symlink `~/{{ devmachine_workspace_link_name }}` darauf erstellt.
+- Optional kann ein allgemeiner User (Default-Name `devuser`) angelegt werden (`devmachine_general_user_enabled: true`).
+- Optional kann ein gemeinsamer Bereich unter `devmachine_shared_workspace_path` angelegt werden (`devmachine_shared_workspace_enabled: true`).
 
 ## Ausführung
 
