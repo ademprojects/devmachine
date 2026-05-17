@@ -113,7 +113,7 @@
   ansible.builtin.file:
     path: "{{ devmachine_ansible_login_ssh_key_vault_file | dirname }}"
     state: directory
-    mode: "0755"
+    mode: "0700"
   delegate_to: localhost
   become: false
   run_once: true
@@ -137,10 +137,20 @@
         content: "{{ devmachine_ansible_login_key_vault_payload | to_nice_yaml(indent=2) }}"
       no_log: true
 
+    - name: Backup existing ansible login key vault file
+      ansible.builtin.copy:
+        src: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+        dest: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
+        mode: "0600"
+        remote_src: true
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
+      no_log: true
+
     - name: Remove existing ansible login key vault file
       ansible.builtin.file:
         path: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
         state: absent
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
 
     - name: Encrypt ansible login key vault source file
       ansible.builtin.command:
@@ -152,12 +162,39 @@
           - --output
           - "{{ devmachine_ansible_login_ssh_key_vault_file }}"
           - "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+      register: devmachine_ansible_vault_encrypt
+      failed_when: devmachine_ansible_vault_encrypt.rc != 0
       no_log: true
+
+    - name: Remove ansible login key vault backup file after successful encryption
+      ansible.builtin.file:
+        path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
+        state: absent
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
+  rescue:
+    - name: Restore ansible login key vault backup after failed encryption
+      ansible.builtin.copy:
+        src: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
+        dest: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+        mode: "0600"
+        remote_src: true
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
+      no_log: true
+
+    - name: Fail when ansible login key vault encryption failed
+      ansible.builtin.fail:
+        msg: "Failed to encrypt ansible login key vault file."
   always:
     - name: Remove ansible login key vault temporary file
       ansible.builtin.file:
         path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
         state: absent
+
+    - name: Remove ansible login key vault backup file
+      ansible.builtin.file:
+        path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
+        state: absent
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
   delegate_to: localhost
   become: false
   run_once: true
