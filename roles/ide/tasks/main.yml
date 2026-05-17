@@ -31,28 +31,33 @@
   become: false
   run_once: true
 
-- name: Resolve ansible login key passphrase
+- name: Initialize ansible login key passphrase from explicit variable
   ansible.builtin.set_fact:
-    devmachine_ansible_login_ssh_key_passphrase_effective: >-
-      {{
-        (
-          devmachine_ansible_login_ssh_key_passphrase
-          if (devmachine_ansible_login_ssh_key_passphrase | length > 0)
-          else (
-            devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase
-            if (
-              devmachine_ansible_login_vault_vars is defined and
-              devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase is defined and
-              devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase | length > 0
-            )
-            else (
-              lookup('password', '/dev/null length=40 chars=ascii_letters,digits')
-              if not devmachine_ansible_login_key_stat.stat.exists
-              else ''
-            )
-          )
-        )
-      }}
+    devmachine_ansible_login_ssh_key_passphrase_effective: "{{ devmachine_ansible_login_ssh_key_passphrase }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Load ansible login key passphrase from vault fallback
+  ansible.builtin.set_fact:
+    devmachine_ansible_login_ssh_key_passphrase_effective: "{{ devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase }}"
+  when:
+    - devmachine_ansible_login_ssh_key_passphrase_effective | length == 0
+    - devmachine_ansible_login_vault_vars is defined
+    - devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase is defined
+    - devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase | length > 0
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Generate ansible login key passphrase for first bootstrap
+  ansible.builtin.set_fact:
+    devmachine_ansible_login_ssh_key_passphrase_effective: "{{ lookup('password', '/dev/null length=40 chars=ascii_letters,digits') }}"
+  when:
+    - devmachine_ansible_login_ssh_key_passphrase_effective | length == 0
+    - not devmachine_ansible_login_key_stat.stat.exists
   delegate_to: localhost
   become: false
   run_once: true
@@ -194,7 +199,6 @@
       ansible.builtin.file:
         path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
         state: absent
-      when: devmachine_ansible_login_key_vault_stat.stat.exists
   delegate_to: localhost
   become: false
   run_once: true

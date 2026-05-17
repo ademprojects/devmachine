@@ -145,3 +145,5 @@ ansible-playbook playbooks/devmachine.yml
 Beim ersten Lauf wird der lokale SSH-Key unter `devmachine_ansible_login_ssh_key_path` erzeugt
 (falls er noch nicht existiert) und anschließend verschlüsselt in
 `devmachine_ansible_login_ssh_key_vault_file` abgelegt (inklusive Passphrase und Private Key).
+Der Standardpfad für `devmachine_ansible_login_ssh_key_vault_file` erwartet die Repo-Struktur
+`playbooks/` und `inventory/` als Geschwisterverzeichnisse.
