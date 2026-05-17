@@ -6,11 +6,66 @@
     create_home: true
     state: present
 
-- name: Ensure ansible login key passphrase is set
+- name: Check if ansible login key vault file exists
+  ansible.builtin.stat:
+    path: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+  register: devmachine_ansible_login_key_vault_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Load ansible login key data from vault file when present
+  ansible.builtin.include_vars:
+    file: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+    name: devmachine_ansible_login_vault_vars
+  when: devmachine_ansible_login_key_vault_stat.stat.exists
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Check local ansible login private key presence
+  ansible.builtin.stat:
+    path: "{{ devmachine_ansible_login_ssh_key_path }}"
+  register: devmachine_ansible_login_key_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Resolve ansible login key passphrase
+  ansible.builtin.set_fact:
+    devmachine_ansible_login_ssh_key_passphrase_effective: >-
+      {{
+        (
+          devmachine_ansible_login_ssh_key_passphrase
+          if (devmachine_ansible_login_ssh_key_passphrase | length > 0)
+          else (
+            devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase
+            if (
+              devmachine_ansible_login_vault_vars is defined and
+              devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase is defined and
+              devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase | length > 0
+            )
+            else (
+              lookup('password', '/dev/null length=40 chars=ascii_letters,digits')
+              if not devmachine_ansible_login_key_stat.stat.exists
+              else ''
+            )
+          )
+        )
+      }}
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Ensure ansible login key passphrase can be resolved
   ansible.builtin.assert:
     that:
-      - devmachine_ansible_login_ssh_key_passphrase | length > 0
-    fail_msg: "Set devmachine_ansible_login_ssh_key_passphrase to generate a password-protected SSH key."
+      - devmachine_ansible_login_ssh_key_passphrase_effective | length > 0
+    fail_msg: >-
+      Could not resolve SSH key passphrase. Provide devmachine_ansible_login_ssh_key_passphrase,
+      or create {{ devmachine_ansible_login_ssh_key_vault_file }} with
+      devmachine_ansible_login_ssh_key_passphrase.
   delegate_to: localhost
   become: false
   run_once: true
@@ -26,16 +81,75 @@
 
 - name: Generate password-protected SSH key for ansible login user
   ansible.builtin.command:
-    cmd: >-
-      ssh-keygen -t ed25519 -C "{{ devmachine_ansible_login_ssh_key_comment }}"
-      -N "{{ devmachine_ansible_login_ssh_key_passphrase }}"
-      -f "{{ devmachine_ansible_login_ssh_key_path }}"
+    argv:
+      - ssh-keygen
+      - -t
+      - ed25519
+      - -C
+      - "{{ devmachine_ansible_login_ssh_key_comment }}"
+      - -N
+      - "{{ devmachine_ansible_login_ssh_key_passphrase_effective }}"
+      - -f
+      - "{{ devmachine_ansible_login_ssh_key_path }}"
   args:
     creates: "{{ devmachine_ansible_login_ssh_key_path }}"
   delegate_to: localhost
   become: false
   run_once: true
   no_log: true
+
+- name: Ensure ansible login key vault password file is configured
+  ansible.builtin.assert:
+    that:
+      - devmachine_ansible_login_ssh_key_vault_password_file | length > 0
+    fail_msg: >-
+      Set ANSIBLE_VAULT_PASSWORD_FILE or devmachine_ansible_login_ssh_key_vault_password_file
+      so the SSH login key can be stored encrypted in Vault.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Ensure ansible login key vault directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_ansible_login_ssh_key_vault_file | dirname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Build ansible login key vault source file
+  ansible.builtin.copy:
+    dest: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+    mode: "0600"
+    content: "{{ {'devmachine_ansible_login_ssh_key_passphrase': devmachine_ansible_login_ssh_key_passphrase_effective, 'devmachine_ansible_login_private_key': lookup('file', devmachine_ansible_login_ssh_key_path)} | to_nice_yaml(indent=2) }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Encrypt ansible login key vault source file
+  ansible.builtin.command:
+    argv:
+      - ansible-vault
+      - encrypt
+      - --vault-password-file
+      - "{{ devmachine_ansible_login_ssh_key_vault_password_file }}"
+      - --output
+      - "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+      - "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Remove ansible login key vault temporary file
+  ansible.builtin.file:
+    path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+    state: absent
+  delegate_to: localhost
+  become: false
+  run_once: true
 
 - name: Ensure SSH directory for ansible login user exists
   ansible.builtin.file:

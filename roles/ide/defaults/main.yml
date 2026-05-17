@@ -50,6 +50,8 @@ devmachine_ansible_login_shell: /bin/bash
 devmachine_ansible_login_ssh_key_path: "{{ lookup('env', 'HOME') }}/.ssh/devmachine_ansible"
 devmachine_ansible_login_ssh_key_comment: ansible@devmachine
 devmachine_ansible_login_ssh_key_passphrase: ""
+devmachine_ansible_login_ssh_key_vault_file: "{{ playbook_dir }}/../inventory/group_vars/all/devmachine_ansible_login.vault.yml"
+devmachine_ansible_login_ssh_key_vault_password_file: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}"
 
 devmachine_java_packages:
   - java-21-openjdk-devel
