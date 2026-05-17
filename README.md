@@ -93,10 +93,11 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 
 Workspace-Defaults:
 
-- Für `devmachine_target_user` wird ein Workspace unter `{{ devmachine_workspace_root }}/{{ devmachine_target_user }}` angelegt.
+- For `devmachine_target_user`, a workspace is created under `{{ devmachine_workspace_root }}/{{ devmachine_target_user }}`.
 - Im Home-Verzeichnis des Zielusers wird standardmäßig ein Symlink `~/{{ devmachine_workspace_link_name }}` darauf erstellt.
 - Optional kann ein allgemeiner User (Default-Name `devuser`) angelegt werden (`devmachine_general_user_enabled: true`).
 - Optional kann ein gemeinsamer Bereich unter `devmachine_shared_workspace_path` angelegt werden (`devmachine_shared_workspace_enabled: true`).
+- Hinweis: Den Default-User `devuser` bei Bedarf per `devmachine_general_user` überschreiben, um Namenskonflikte zu vermeiden.
 
 ## Ausführung
 

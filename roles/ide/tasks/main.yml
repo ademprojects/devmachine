@@ -297,8 +297,6 @@
     src: "{{ devmachine_workspace_root }}/{{ devmachine_target_user }}"
     dest: "{{ devmachine_effective_user_home }}/{{ devmachine_workspace_link_name }}"
     state: link
-    owner: "{{ devmachine_target_user }}"
-    group: "{{ devmachine_effective_target_group }}"
     force: true
   when: devmachine_workspace_setup_enabled | bool
 
@@ -332,7 +330,7 @@
     state: directory
     owner: "{{ devmachine_effective_shared_workspace_owner }}"
     group: "{{ devmachine_effective_shared_workspace_group }}"
-    mode: "0775"
+    mode: "0755"
   when: devmachine_shared_workspace_enabled | bool
 
 - name: Ensure VS Code CLI is available
