@@ -30,6 +30,8 @@ pwsh -File ./tools/download-linux-ide-packages.ps1 `
   -ScpTargetPath /opt/devmachine/packages
 ```
 
+Optional (nur beim ersten Kontakt): `-ScpAcceptNewHostKey` setzen, damit neue Host-Keys automatisch akzeptiert werden.
+
 Mit automatischer Passwortübergabe (wenn `sshpass` installiert ist):
 
 ```powershell
@@ -41,6 +43,8 @@ pwsh -File ./tools/download-linux-ide-packages.ps1 `
   -ScpUsername root `
   -ScpPassword $pw
 ```
+
+Hinweis: Für Produktion nach der Initialphase bevorzugt per SSH-Key und dediziertem User statt `root`+Passwort arbeiten.
 
 Danach Dateien explizit auf den Steuerrechner legen:
 
