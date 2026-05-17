@@ -92,6 +92,8 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
 
+Wichtig: `devmachine_target_user` muss explizit auf einen echten Entwickler-User gesetzt werden (kein `runner`).
+
 Workspace Defaults:
 
 - For `devmachine_target_user`, a workspace is created under `{{ devmachine_workspace_root }}/{{ devmachine_target_user }}`.
@@ -105,13 +107,13 @@ Workspace Defaults:
 Lokaler Host:
 
 ```bash
-ansible-playbook playbooks/devmachine.yml -e target_hosts=localhost
+ansible-playbook playbooks/devmachine.yml -e target_hosts=localhost -e devmachine_target_user=developer1
 ```
 
 Remote-Hosts aus der Gruppe `devmachines`:
 
 ```bash
-ansible-playbook playbooks/devmachine.yml
+ansible-playbook playbooks/devmachine.yml -e devmachine_target_user=developer1
 ```
 
 Beispiel mit passwortgeschütztem neuem SSH-Key für den Login-User `ansible`:
