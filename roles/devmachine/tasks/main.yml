@@ -81,6 +81,21 @@
     state: directory
     mode: "0755"
 
+- name: Find existing IntelliJ directories
+  ansible.builtin.find:
+    paths: "{{ devmachine_intellij_install_dir }}"
+    file_type: directory
+    patterns: "idea-*"
+    recurse: false
+  register: devmachine_existing_intellij_dirs
+
+- name: Remove existing IntelliJ directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ devmachine_existing_intellij_dirs.files }}"
+  when: devmachine_existing_intellij_dirs.matched | int > 0
+
 - name: Extract IntelliJ archive
   ansible.builtin.unarchive:
     src: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
@@ -97,7 +112,7 @@
 
 - name: Set IntelliJ home
   ansible.builtin.set_fact:
-    devmachine_intellij_home: "{{ (devmachine_intellij_dirs.files | sort(attribute='path') | last).path }}"
+    devmachine_intellij_home: "{{ devmachine_intellij_dirs.files[0].path }}"
   when: devmachine_intellij_dirs.matched | int > 0
 
 - name: Fail when IntelliJ extraction did not produce expected directory
@@ -117,7 +132,6 @@
     dest: "{{ devmachine_effective_user_home }}/.npmrc"
     content: |
       registry={{ devmachine_npm_registry_url }}
-      always-auth=true
     owner: "{{ devmachine_target_user }}"
     group: "{{ devmachine_target_user }}"
     mode: "0644"
