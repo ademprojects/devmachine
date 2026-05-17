@@ -69,28 +69,28 @@
     msg: "IntelliJ archive not found at {{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
   when: not devmachine_intellij_stat.stat.exists
 
-- name: Validate VS Code checksum when provided
+- name: Read VS Code checksum when provided
   ansible.builtin.stat:
     path: "{{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
     checksum_algorithm: sha256
   register: devmachine_vscode_checksum_stat
   when: devmachine_vscode_sha256 | length > 0
 
-- name: Validate VS Code checksum when provided
+- name: Assert VS Code checksum matches expected value
   ansible.builtin.assert:
     that:
       - devmachine_vscode_checksum_stat.stat.checksum == devmachine_vscode_sha256
     fail_msg: "VS Code checksum mismatch for {{ devmachine_vscode_rpm }}"
   when: devmachine_vscode_sha256 | length > 0
 
-- name: Validate IntelliJ checksum when provided
+- name: Read IntelliJ checksum when provided
   ansible.builtin.stat:
     path: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
     checksum_algorithm: sha256
   register: devmachine_intellij_checksum_stat
   when: devmachine_intellij_sha256 | length > 0
 
-- name: Validate IntelliJ checksum when provided
+- name: Assert IntelliJ checksum matches expected value
   ansible.builtin.assert:
     that:
       - devmachine_intellij_checksum_stat.stat.checksum == devmachine_intellij_sha256
