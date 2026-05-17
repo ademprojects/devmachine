@@ -275,6 +275,10 @@
       - bash
       - -lc
       - command -v code
+  become: true
+  become_user: "{{ devmachine_target_user }}"
+  environment:
+    HOME: "{{ devmachine_effective_user_home }}"
   register: devmachine_vscode_cli_path
   changed_when: false
   failed_when: false
@@ -295,6 +299,14 @@
     HOME: "{{ devmachine_effective_user_home }}"
   register: devmachine_installed_vscode_extensions
   changed_when: false
+  failed_when: false
+
+- name: Fail when installed VS Code extensions cannot be read
+  ansible.builtin.assert:
+    that:
+      - devmachine_installed_vscode_extensions.rc == 0
+    fail_msg: "Failed to list VS Code extensions for {{ devmachine_target_user }}."
+    success_msg: "Installed VS Code extensions were read successfully."
 
 - name: Normalize installed VS Code extension IDs
   ansible.builtin.set_fact:
