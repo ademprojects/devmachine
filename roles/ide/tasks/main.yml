@@ -43,7 +43,7 @@
   ansible.builtin.set_fact:
     devmachine_ansible_login_ssh_key_passphrase_effective: "{{ devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase }}"
   when:
-    - devmachine_ansible_login_ssh_key_passphrase_effective | length == 0
+    - (devmachine_ansible_login_ssh_key_passphrase_effective | default('')) | length == 0
     - devmachine_ansible_login_vault_vars is defined
     - devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase is defined
     - devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase | length > 0
@@ -56,7 +56,7 @@
   ansible.builtin.set_fact:
     devmachine_ansible_login_ssh_key_passphrase_effective: "{{ lookup('password', '/dev/null length=40 chars=ascii_letters,digits') }}"
   when:
-    - devmachine_ansible_login_ssh_key_passphrase_effective | length == 0
+    - (devmachine_ansible_login_ssh_key_passphrase_effective | default('')) | length == 0
     - not devmachine_ansible_login_key_stat.stat.exists
   delegate_to: localhost
   become: false
