@@ -84,6 +84,7 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_shared_workspace_group`
 - `devmachine_general_user_enabled`
 - `devmachine_general_user`
+- `devmachine_general_user_shell`
 - `devmachine_ansible_login_user`
 - `devmachine_ansible_login_ssh_key_path`
 - `devmachine_ansible_login_ssh_key_passphrase`
@@ -91,7 +92,7 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
 
-Workspace-Defaults:
+Workspace Defaults:
 
 - For `devmachine_target_user`, a workspace is created under `{{ devmachine_workspace_root }}/{{ devmachine_target_user }}`.
 - A symlink `~/{{ devmachine_workspace_link_name }}` is created by default in the target user's home directory.
