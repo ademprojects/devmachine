@@ -19,6 +19,29 @@ Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 pwsh -File ./tools/download-linux-ide-packages.ps1 -OutputDirectory ./downloads
 ```
 
+Optional: direkt per SCP auf die Zielmaschine hochladen (initialer Login z. B. `root` mit Passwort):
+
+```powershell
+pwsh -File ./tools/download-linux-ide-packages.ps1 `
+  -OutputDirectory ./downloads `
+  -UploadToTarget `
+  -ScpTargetHost rhel96.example.local `
+  -ScpUsername root `
+  -ScpTargetPath /opt/devmachine/packages
+```
+
+Mit automatischer Passwortübergabe (wenn `sshpass` installiert ist):
+
+```powershell
+$pw = Read-Host "Root password" -AsSecureString
+pwsh -File ./tools/download-linux-ide-packages.ps1 `
+  -OutputDirectory ./downloads `
+  -UploadToTarget `
+  -ScpTargetHost rhel96.example.local `
+  -ScpUsername root `
+  -ScpPassword $pw
+```
+
 Danach Dateien explizit auf den Steuerrechner legen:
 
 ```bash
