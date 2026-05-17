@@ -29,7 +29,7 @@ devmachine_ansible_login_ssh_key_comment: ansible@devmachine
 devmachine_ansible_login_ssh_key_passphrase: ""
 
 devmachine_java_packages:
-  - java-17-openjdk-devel
+  - java-21-openjdk-devel
   - git
   - wget
   - curl
