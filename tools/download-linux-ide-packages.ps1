@@ -15,9 +15,17 @@ $vsCodeTarget = Join-Path $OutputDirectory "code-latest.x86_64.rpm"
 $intelliJTarget = Join-Path $OutputDirectory "ideaIC-latest.tar.gz"
 
 Write-Host "Downloading VS Code Linux RPM..."
-Invoke-WebRequest -Uri $VsCodeUrl -OutFile $vsCodeTarget
+Invoke-WebRequest -Uri $VsCodeUrl -OutFile $vsCodeTarget -ErrorAction Stop
 
 Write-Host "Downloading IntelliJ IDEA Linux archive..."
-Invoke-WebRequest -Uri $IntelliJUrl -OutFile $intelliJTarget
+Invoke-WebRequest -Uri $IntelliJUrl -OutFile $intelliJTarget -ErrorAction Stop
+
+if (-not (Test-Path $vsCodeTarget) -or (Get-Item $vsCodeTarget).Length -le 0) {
+    throw "VS Code download failed: $vsCodeTarget"
+}
+
+if (-not (Test-Path $intelliJTarget) -or (Get-Item $intelliJTarget).Length -le 0) {
+    throw "IntelliJ download failed: $intelliJTarget"
+}
 
 Write-Host "Done. Files saved in $OutputDirectory"
