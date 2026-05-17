@@ -92,7 +92,7 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
 
-Wichtig: `devmachine_target_user` muss explizit auf einen echten Entwickler-User gesetzt werden (kein `runner`).
+Important: set `devmachine_target_user` explicitly to a real developer account (not `runner`).
 
 Workspace Defaults:
 
