@@ -1,0 +1,199 @@
+---
+- name: Validate target user input ({{ devmachine_loop_user }})
+  ansible.builtin.assert:
+    that:
+      - devmachine_loop_user | length > 0
+      - devmachine_loop_user | lower != 'runner'
+      - devmachine_loop_user is match('^[a-z_](?:[a-z0-9_-]*[a-z0-9_])?$')
+    fail_msg: >-
+      devmachine_target_users entry '{{ devmachine_loop_user }}' is invalid.
+      Must be a real developer account (not 'runner') matching [a-z_][a-z0-9_-]*.
+
+- name: Read target user passwd entry ({{ devmachine_loop_user }})
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ devmachine_loop_user }}"
+
+- name: Determine effective target group ({{ devmachine_loop_user }})
+  ansible.builtin.set_fact:
+    devmachine_effective_target_group: >-
+      {{
+        ansible_facts.getent_group
+        | dict2items
+        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[devmachine_loop_user][2])
+        | map(attribute='key')
+        | first
+      }}
+
+- name: Ensure effective target group was resolved ({{ devmachine_loop_user }})
+  ansible.builtin.assert:
+    that:
+      - devmachine_effective_target_group | length > 0
+    fail_msg: "Unable to resolve primary group for {{ devmachine_loop_user }}."
+
+- name: Determine effective target user home ({{ devmachine_loop_user }})
+  ansible.builtin.set_fact:
+    devmachine_effective_user_home: "{{ ansible_facts.getent_passwd[devmachine_loop_user][4] }}"
+
+- name: Ensure workspace root directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_workspace_root }}"
+    state: directory
+    mode: "0755"
+  when: devmachine_workspace_setup_enabled | bool
+
+- name: Ensure per-user workspace directory exists ({{ devmachine_loop_user }})
+  ansible.builtin.file:
+    path: "{{ devmachine_workspace_root }}/{{ devmachine_loop_user }}"
+    state: directory
+    owner: "{{ devmachine_loop_user }}"
+    group: "{{ devmachine_effective_target_group }}"
+    mode: "0755"
+  when: devmachine_workspace_setup_enabled | bool
+
+- name: Ensure workspace symlink exists in user home ({{ devmachine_loop_user }})
+  ansible.builtin.file:
+    src: "{{ devmachine_workspace_root }}/{{ devmachine_loop_user }}"
+    dest: "{{ devmachine_effective_user_home }}/{{ devmachine_workspace_link_name }}"
+    state: link
+    force: true
+  when: devmachine_workspace_setup_enabled | bool
+
+- name: Determine effective shared workspace owner
+  ansible.builtin.set_fact:
+    devmachine_effective_shared_workspace_owner: >-
+      {{
+        devmachine_shared_workspace_owner
+        if (devmachine_shared_workspace_owner | length > 0)
+        else (
+          devmachine_general_user
+          if (devmachine_general_user_enabled | bool)
+          else devmachine_loop_user
+        )
+      }}
+  when:
+    - devmachine_shared_workspace_enabled | bool
+    - devmachine_loop_user == devmachine_target_users[0]
+
+- name: Determine effective shared workspace group
+  ansible.builtin.set_fact:
+    devmachine_effective_shared_workspace_group: >-
+      {{
+        devmachine_shared_workspace_group
+        if (devmachine_shared_workspace_group | length > 0)
+        else devmachine_effective_target_group
+      }}
+  when:
+    - devmachine_shared_workspace_enabled | bool
+    - devmachine_loop_user == devmachine_target_users[0]
+
+- name: Ensure shared workspace directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_shared_workspace_path }}"
+    state: directory
+    owner: "{{ devmachine_effective_shared_workspace_owner }}"
+    group: "{{ devmachine_effective_shared_workspace_group }}"
+    mode: "0755"
+  when:
+    - devmachine_shared_workspace_enabled | bool
+    - devmachine_loop_user == devmachine_target_users[0]
+
+- name: Ensure VS Code CLI is available ({{ devmachine_loop_user }})
+  ansible.builtin.command:
+    cmd: /usr/bin/code --version
+  become: true
+  become_user: "{{ devmachine_loop_user }}"
+  environment:
+    HOME: "{{ devmachine_effective_user_home }}"
+  register: devmachine_vscode_cli_path
+  changed_when: false
+  failed_when: false
+
+- name: Fail when VS Code CLI is unavailable ({{ devmachine_loop_user }})
+  ansible.builtin.assert:
+    that:
+      - devmachine_vscode_cli_path.rc == 0
+    fail_msg: >-
+      VS Code CLI ('code') is not available in PATH for user {{ devmachine_loop_user }} after VS Code installation.
+      Verify that VS Code RPM installation completed successfully and that the user's shell PATH is up to date.
+    success_msg: "VS Code CLI is available."
+
+- name: List installed VS Code extensions for {{ devmachine_loop_user }}
+  ansible.builtin.command:
+    cmd: code --list-extensions
+  become: true
+  become_user: "{{ devmachine_loop_user }}"
+  environment:
+    HOME: "{{ devmachine_effective_user_home }}"
+  register: devmachine_installed_vscode_extensions
+  changed_when: false
+  failed_when: false
+
+- name: Fail when installed VS Code extensions cannot be read ({{ devmachine_loop_user }})
+  ansible.builtin.assert:
+    that:
+      - devmachine_installed_vscode_extensions.rc == 0
+    fail_msg: >-
+      Failed to list VS Code extensions for {{ devmachine_loop_user }}.
+      stdout={{ devmachine_installed_vscode_extensions.stdout | default('') | trim }}
+      stderr={{ devmachine_installed_vscode_extensions.stderr | default('') | trim }}
+    success_msg: "Installed VS Code extensions were read successfully."
+
+- name: Normalize installed VS Code extension IDs ({{ devmachine_loop_user }})
+  ansible.builtin.set_fact:
+    devmachine_installed_extensions_lowercase: "{{ devmachine_installed_vscode_extensions.stdout_lines | map('lower') | list }}"
+
+- name: Install VS Code extensions from local VSIX packages ({{ devmachine_loop_user }})
+  ansible.builtin.command:
+    cmd: "code --install-extension {{ devmachine_package_dir }}/{{ item.filename }}"
+  become: true
+  become_user: "{{ devmachine_loop_user }}"
+  environment:
+    HOME: "{{ devmachine_effective_user_home }}"
+  loop: "{{ devmachine_vscode_extensions }}"
+  when: (item.id | lower) not in devmachine_installed_extensions_lowercase
+
+- name: Configure npm registry to Nexus ({{ devmachine_loop_user }})
+  ansible.builtin.copy:
+    dest: "{{ devmachine_effective_user_home }}/.npmrc"
+    content: |
+      registry={{ devmachine_npm_registry_url }}
+    owner: "{{ devmachine_loop_user }}"
+    group: "{{ devmachine_effective_target_group }}"
+    mode: "0644"
+
+- name: Ensure pip config directory exists ({{ devmachine_loop_user }})
+  ansible.builtin.file:
+    path: "{{ devmachine_effective_user_home }}/.pip"
+    state: directory
+    owner: "{{ devmachine_loop_user }}"
+    group: "{{ devmachine_effective_target_group }}"
+    mode: "0755"
+
+- name: Configure pip index to Nexus ({{ devmachine_loop_user }})
+  ansible.builtin.copy:
+    dest: "{{ devmachine_effective_user_home }}/.pip/pip.conf"
+    content: |
+      [global]
+      index-url = {{ devmachine_pip_index_url }}
+    owner: "{{ devmachine_loop_user }}"
+    group: "{{ devmachine_effective_target_group }}"
+    mode: "0644"
+
+- name: Ensure pyenv directory exists ({{ devmachine_loop_user }})
+  ansible.builtin.file:
+    path: "{{ devmachine_effective_user_home }}/.pyenv"
+    state: directory
+    owner: "{{ devmachine_loop_user }}"
+    group: "{{ devmachine_effective_target_group }}"
+    mode: "0755"
+
+- name: Configure passwordless sudo for {{ devmachine_loop_user }}
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ devmachine_loop_user }}"
+    content: "{{ devmachine_loop_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "/usr/sbin/visudo -cf %s"
+  when: devmachine_sudo_nopasswd | bool

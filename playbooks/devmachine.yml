@@ -1,0 +1,7 @@
+---
+- name: Provision RHEL 9.6 developer machine
+  hosts: "{{ target_hosts | default('devmachines') }}"
+  become: true
+  gather_facts: true
+  roles:
+    - role: ide

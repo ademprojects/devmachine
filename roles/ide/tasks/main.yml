@@ -1,0 +1,427 @@
+---
+- name: Ensure ansible login user exists
+  ansible.builtin.user:
+    name: "{{ devmachine_ansible_login_user }}"
+    shell: "{{ devmachine_ansible_login_shell }}"
+    create_home: true
+    state: present
+
+- name: Check if ansible login key vault file exists
+  ansible.builtin.stat:
+    path: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+  register: devmachine_ansible_login_key_vault_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Load ansible login key data from vault file when present
+  ansible.builtin.include_vars:
+    file: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+    name: devmachine_ansible_login_vault_vars
+  when: devmachine_ansible_login_key_vault_stat.stat.exists
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Check local ansible login private key presence
+  ansible.builtin.stat:
+    path: "{{ devmachine_ansible_login_ssh_key_path }}"
+  register: devmachine_ansible_login_key_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Initialize ansible login key passphrase from explicit variable
+  ansible.builtin.set_fact:
+    devmachine_ansible_login_ssh_key_passphrase_effective: "{{ devmachine_ansible_login_ssh_key_passphrase }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Load ansible login key passphrase from vault fallback
+  ansible.builtin.set_fact:
+    devmachine_ansible_login_ssh_key_passphrase_effective: "{{ devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase }}"
+  when:
+    - (devmachine_ansible_login_ssh_key_passphrase_effective | default('')) | length == 0
+    - devmachine_ansible_login_vault_vars is defined
+    - devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase is defined
+    - devmachine_ansible_login_vault_vars.devmachine_ansible_login_ssh_key_passphrase | length > 0
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Generate ansible login key passphrase for first bootstrap
+  ansible.builtin.set_fact:
+    devmachine_ansible_login_ssh_key_passphrase_effective: "{{ lookup('password', '/dev/null length=40 chars=ascii_letters,digits') }}"
+  when:
+    - (devmachine_ansible_login_ssh_key_passphrase_effective | default('')) | length == 0
+    - not devmachine_ansible_login_key_stat.stat.exists
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Ensure ansible login key passphrase can be resolved
+  ansible.builtin.assert:
+    that:
+      - devmachine_ansible_login_ssh_key_passphrase_effective | length > 0
+    fail_msg: >-
+      Could not resolve SSH key passphrase. Provide devmachine_ansible_login_ssh_key_passphrase,
+      or create {{ devmachine_ansible_login_ssh_key_vault_file }} with
+      devmachine_ansible_login_ssh_key_passphrase.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Ensure local SSH key directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_ansible_login_ssh_key_path | dirname }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Generate password-protected SSH key for ansible login user
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -t
+      - ed25519
+      - -C
+      - "{{ devmachine_ansible_login_ssh_key_comment }}"
+      - -N
+      - "{{ devmachine_ansible_login_ssh_key_passphrase_effective }}"
+      - -f
+      - "{{ devmachine_ansible_login_ssh_key_path }}"
+  args:
+    creates: "{{ devmachine_ansible_login_ssh_key_path }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Ensure ansible login key vault password file is configured
+  ansible.builtin.assert:
+    that:
+      - devmachine_ansible_login_ssh_key_vault_password_file | length > 0
+    fail_msg: >-
+      Set ANSIBLE_VAULT_PASSWORD_FILE or devmachine_ansible_login_ssh_key_vault_password_file
+      so the SSH login key can be stored encrypted in Vault.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Ensure ansible login key vault directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_ansible_login_ssh_key_vault_file | dirname }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Prepare ansible login key vault payload
+  ansible.builtin.set_fact:
+    devmachine_ansible_login_key_vault_payload:
+      devmachine_ansible_login_ssh_key_passphrase: "{{ devmachine_ansible_login_ssh_key_passphrase_effective }}"
+      devmachine_ansible_login_private_key: "{{ lookup('file', devmachine_ansible_login_ssh_key_path) }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Write encrypted ansible login key vault file
+  block:
+    - name: Build ansible login key vault source file
+      ansible.builtin.copy:
+        dest: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+        mode: "0600"
+        content: "{{ devmachine_ansible_login_key_vault_payload | to_nice_yaml(indent=2) }}"
+      no_log: true
+
+    - name: Backup existing ansible login key vault file
+      ansible.builtin.copy:
+        src: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+        dest: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
+        mode: "0600"
+        remote_src: true
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
+      no_log: true
+
+    - name: Remove existing ansible login key vault file
+      ansible.builtin.file:
+        path: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+        state: absent
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
+
+    - name: Encrypt ansible login key vault source file
+      ansible.builtin.command:
+        argv:
+          - ansible-vault
+          - encrypt
+          - --vault-password-file
+          - "{{ devmachine_ansible_login_ssh_key_vault_password_file }}"
+          - --output
+          - "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+          - "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+      register: devmachine_ansible_vault_encrypt
+      failed_when: devmachine_ansible_vault_encrypt.rc != 0
+      no_log: true
+
+    - name: Remove ansible login key vault backup file after successful encryption
+      ansible.builtin.file:
+        path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
+        state: absent
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
+  rescue:
+    - name: Restore ansible login key vault backup after failed encryption
+      ansible.builtin.copy:
+        src: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
+        dest: "{{ devmachine_ansible_login_ssh_key_vault_file }}"
+        mode: "0600"
+        remote_src: true
+      when: devmachine_ansible_login_key_vault_stat.stat.exists
+      no_log: true
+
+    - name: Fail when ansible login key vault encryption failed
+      ansible.builtin.fail:
+        msg: "Failed to encrypt ansible login key vault file."
+  always:
+    - name: Remove ansible login key vault temporary file
+      ansible.builtin.file:
+        path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.tmp"
+        state: absent
+
+    - name: Remove ansible login key vault backup file
+      ansible.builtin.file:
+        path: "{{ devmachine_ansible_login_ssh_key_vault_file }}.bak"
+        state: absent
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Ensure SSH directory for ansible login user exists
+  ansible.builtin.file:
+    path: "/home/{{ devmachine_ansible_login_user }}/.ssh"
+    state: directory
+    owner: "{{ devmachine_ansible_login_user }}"
+    group: "{{ devmachine_ansible_login_user }}"
+    mode: "0700"
+
+- name: Configure authorized key for ansible login user
+  ansible.builtin.copy:
+    dest: "/home/{{ devmachine_ansible_login_user }}/.ssh/authorized_keys"
+    content: "{{ lookup('file', devmachine_ansible_login_ssh_key_path + '.pub') }}\n"
+    owner: "{{ devmachine_ansible_login_user }}"
+    group: "{{ devmachine_ansible_login_user }}"
+    mode: "0600"
+
+- name: Ensure package directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_package_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Check local VS Code package presence
+  ansible.builtin.stat:
+    path: "{{ devmachine_local_package_dir }}/{{ devmachine_vscode_rpm }}"
+  register: devmachine_local_vscode_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Check local IntelliJ archive presence
+  ansible.builtin.stat:
+    path: "{{ devmachine_local_package_dir }}/{{ devmachine_intellij_archive }}"
+  register: devmachine_local_intellij_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Check local VS Code extension package presence
+  ansible.builtin.stat:
+    path: "{{ devmachine_local_package_dir }}/{{ item.filename }}"
+  register: devmachine_local_vscode_extension_stats
+  loop: "{{ devmachine_vscode_extensions }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail when local VS Code package is missing
+  ansible.builtin.fail:
+    msg: "VS Code RPM not found at {{ devmachine_local_package_dir }}/{{ devmachine_vscode_rpm }}"
+  when: not devmachine_local_vscode_stat.stat.exists
+  run_once: true
+
+- name: Fail when local IntelliJ archive is missing
+  ansible.builtin.fail:
+    msg: "IntelliJ archive not found at {{ devmachine_local_package_dir }}/{{ devmachine_intellij_archive }}"
+  when: not devmachine_local_intellij_stat.stat.exists
+  run_once: true
+
+- name: Fail when local VS Code extension package is missing
+  ansible.builtin.fail:
+    msg: "VS Code extension package not found at {{ devmachine_local_package_dir }}/{{ item.item.filename }}"
+  when: not item.stat.exists
+  loop: "{{ devmachine_local_vscode_extension_stats.results }}"
+  run_once: true
+
+- name: Copy VS Code package to remote host
+  ansible.builtin.copy:
+    src: "{{ devmachine_local_package_dir }}/{{ devmachine_vscode_rpm }}"
+    dest: "{{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
+    mode: "0644"
+
+- name: Copy IntelliJ archive to remote host
+  ansible.builtin.copy:
+    src: "{{ devmachine_local_package_dir }}/{{ devmachine_intellij_archive }}"
+    dest: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
+    mode: "0644"
+
+- name: Copy VS Code extension packages to remote host
+  ansible.builtin.copy:
+    src: "{{ devmachine_local_package_dir }}/{{ item.filename }}"
+    dest: "{{ devmachine_package_dir }}/{{ item.filename }}"
+    mode: "0644"
+  loop: "{{ devmachine_vscode_extensions }}"
+
+- name: Read VS Code checksum when provided
+  ansible.builtin.stat:
+    path: "{{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
+    checksum_algorithm: sha256
+  register: devmachine_vscode_checksum_stat
+  when: devmachine_vscode_sha256 | length > 0
+
+- name: Assert VS Code checksum matches expected value
+  ansible.builtin.assert:
+    that:
+      - devmachine_vscode_checksum_stat.stat.checksum == devmachine_vscode_sha256
+    fail_msg: "VS Code checksum mismatch for {{ devmachine_vscode_rpm }}"
+  when: devmachine_vscode_sha256 | length > 0
+
+- name: Read IntelliJ checksum when provided
+  ansible.builtin.stat:
+    path: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
+    checksum_algorithm: sha256
+  register: devmachine_intellij_checksum_stat
+  when: devmachine_intellij_sha256 | length > 0
+
+- name: Assert IntelliJ checksum matches expected value
+  ansible.builtin.assert:
+    that:
+      - devmachine_intellij_checksum_stat.stat.checksum == devmachine_intellij_sha256
+    fail_msg: "IntelliJ checksum mismatch for {{ devmachine_intellij_archive }}"
+  when: devmachine_intellij_sha256 | length > 0
+
+- name: Configure Nexus as DNF repository
+  ansible.builtin.yum_repository:
+    name: "{{ devmachine_dnf_repo_name }}"
+    description: "{{ devmachine_dnf_repo_description }}"
+    baseurl: "{{ devmachine_dnf_repo_url }}"
+    enabled: true
+    gpgcheck: "{{ devmachine_dnf_gpgcheck }}"
+    gpgkey: "{{ devmachine_dnf_gpgkey if (devmachine_dnf_gpgkey | length > 0) else omit }}"
+
+- name: Update all system packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+
+- name: Install Java development packages
+  ansible.builtin.dnf:
+    name: "{{ devmachine_java_packages }}"
+    state: present
+
+- name: Install VS Code from local RPM
+  ansible.builtin.dnf:
+    name: "{{ devmachine_package_dir }}/{{ devmachine_vscode_rpm }}"
+    state: present
+
+- name: Ensure IntelliJ install directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_intellij_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Find existing IntelliJ directories
+  ansible.builtin.find:
+    paths: "{{ devmachine_intellij_install_dir }}"
+    file_type: directory
+    patterns: "idea-*"
+    recurse: false
+  register: devmachine_existing_intellij_dirs
+
+- name: Remove existing IntelliJ directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ devmachine_existing_intellij_dirs.files }}"
+  when: devmachine_existing_intellij_dirs.matched | int > 0
+
+- name: Extract IntelliJ archive
+  ansible.builtin.unarchive:
+    src: "{{ devmachine_package_dir }}/{{ devmachine_intellij_archive }}"
+    dest: "{{ devmachine_intellij_install_dir }}"
+    remote_src: true
+
+- name: Find extracted IntelliJ directory
+  ansible.builtin.find:
+    paths: "{{ devmachine_intellij_install_dir }}"
+    file_type: directory
+    patterns: "idea-*"
+    recurse: false
+  register: devmachine_intellij_dirs
+
+- name: Fail when IntelliJ extraction did not produce expected directory
+  ansible.builtin.fail:
+    msg: "No extracted IntelliJ directory found in {{ devmachine_intellij_install_dir }}"
+  when: devmachine_intellij_dirs.matched | int == 0
+
+- name: Set IntelliJ home
+  ansible.builtin.set_fact:
+    devmachine_intellij_home: "{{ devmachine_intellij_dirs.files[0].path }}"
+  when: devmachine_intellij_dirs.matched | int > 0
+
+- name: Symlink IntelliJ launcher
+  ansible.builtin.file:
+    src: "{{ devmachine_intellij_home }}/bin/idea.sh"
+    dest: "{{ devmachine_intellij_symlink }}"
+    state: link
+    force: true
+
+- name: Ensure optional general user exists
+  ansible.builtin.user:
+    name: "{{ devmachine_general_user }}"
+    shell: "{{ devmachine_general_user_shell }}"
+    create_home: true
+    state: present
+  when: devmachine_general_user_enabled | bool
+
+- name: Validate devmachine_target_users list
+  ansible.builtin.assert:
+    that:
+      - devmachine_target_users | length > 0
+    fail_msg: "Set devmachine_target_users to a non-empty list of real developer accounts."
+
+- name: Read system group entries
+  ansible.builtin.getent:
+    database: group
+
+- name: Provision per-user configuration
+  ansible.builtin.include_tasks: per_user.yml
+  loop: "{{ devmachine_target_users }}"
+  loop_control:
+    loop_var: devmachine_loop_user
+
+- name: Configure pyenv and Nexus environment defaults
+  ansible.builtin.copy:
+    dest: /etc/profile.d/devmachine-nexus.sh
+    mode: "0644"
+    content: |
+      export PYENV_ROOT="$HOME/.pyenv"
+      export PATH="$PYENV_ROOT/bin:$PATH"
+      export PYTHON_BUILD_MIRROR_URL="{{ devmachine_pyenv_mirror_url }}"
+      export PIP_INDEX_URL="{{ devmachine_pip_index_url }}"
