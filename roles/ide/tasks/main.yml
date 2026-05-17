@@ -268,6 +268,73 @@
         else (ansible_facts.getent_passwd[devmachine_target_user][4])
       }}
 
+- name: Ensure optional general user exists
+  ansible.builtin.user:
+    name: "{{ devmachine_general_user }}"
+    shell: "{{ devmachine_general_user_shell }}"
+    create_home: true
+    state: present
+  when: devmachine_general_user_enabled | bool
+
+- name: Ensure workspace root directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_workspace_root }}"
+    state: directory
+    mode: "0755"
+  when: devmachine_workspace_setup_enabled | bool
+
+- name: Ensure per-user workspace directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_workspace_root }}/{{ devmachine_target_user }}"
+    state: directory
+    owner: "{{ devmachine_target_user }}"
+    group: "{{ devmachine_effective_target_group }}"
+    mode: "0755"
+  when: devmachine_workspace_setup_enabled | bool
+
+- name: Ensure workspace symlink exists in user home
+  ansible.builtin.file:
+    src: "{{ devmachine_workspace_root }}/{{ devmachine_target_user }}"
+    dest: "{{ devmachine_effective_user_home }}/{{ devmachine_workspace_link_name }}"
+    state: link
+    owner: "{{ devmachine_target_user }}"
+    group: "{{ devmachine_effective_target_group }}"
+    force: true
+  when: devmachine_workspace_setup_enabled | bool
+
+- name: Determine effective shared workspace owner
+  ansible.builtin.set_fact:
+    devmachine_effective_shared_workspace_owner: >-
+      {{
+        devmachine_shared_workspace_owner
+        if (devmachine_shared_workspace_owner | length > 0)
+        else (
+          devmachine_general_user
+          if (devmachine_general_user_enabled | bool)
+          else devmachine_target_user
+        )
+      }}
+  when: devmachine_shared_workspace_enabled | bool
+
+- name: Determine effective shared workspace group
+  ansible.builtin.set_fact:
+    devmachine_effective_shared_workspace_group: >-
+      {{
+        devmachine_shared_workspace_group
+        if (devmachine_shared_workspace_group | length > 0)
+        else devmachine_effective_target_group
+      }}
+  when: devmachine_shared_workspace_enabled | bool
+
+- name: Ensure shared workspace directory exists
+  ansible.builtin.file:
+    path: "{{ devmachine_shared_workspace_path }}"
+    state: directory
+    owner: "{{ devmachine_effective_shared_workspace_owner }}"
+    group: "{{ devmachine_effective_shared_workspace_group }}"
+    mode: "0775"
+  when: devmachine_shared_workspace_enabled | bool
+
 - name: Ensure VS Code CLI is available
   ansible.builtin.command:
     cmd: /usr/bin/code --version
