@@ -55,8 +55,9 @@ if ($UploadToTarget) {
             throw "ScpPassword was provided but sshpass is not installed. Install sshpass or omit ScpPassword for interactive password entry."
         }
 
-        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ScpPassword)
+        $bstr = [IntPtr]::Zero
         try {
+            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ScpPassword)
             $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
             $env:SSHPASS = $plainPassword
             & sshpass -e scp @scpArgs $vsCodeTarget $intelliJTarget $remoteTarget

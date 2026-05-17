@@ -201,7 +201,7 @@
 - name: Validate target user input
   ansible.builtin.assert:
     that:
-      - devmachine_target_user is match('^[a-z_][a-z0-9_-]*$')
+      - devmachine_target_user is match('^[a-z_][a-z0-9_-]*[a-z0-9_]$')
     fail_msg: "devmachine_target_user contains unsupported characters."
 
 - name: Read target user passwd entry
