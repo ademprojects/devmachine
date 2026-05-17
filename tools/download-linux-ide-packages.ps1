@@ -8,7 +8,8 @@ param(
     [string]$ScpTargetHost,
     [string]$ScpTargetPath = "/opt/devmachine/packages",
     [string]$ScpUsername = "root",
-    [SecureString]$ScpPassword
+    [SecureString]$ScpPassword,
+    [switch]$ScpAcceptNewHostKey
 )
 
 Set-StrictMode -Version Latest
@@ -44,6 +45,10 @@ if ($UploadToTarget) {
 
     Write-Host "Uploading packages to ${ScpUsername}@${ScpTargetHost}:${ScpTargetPath} ..."
     $remoteTarget = "${ScpUsername}@${ScpTargetHost}:${ScpTargetPath}/"
+    $scpArgs = @()
+    if ($ScpAcceptNewHostKey) {
+        $scpArgs += @("-o", "StrictHostKeyChecking=accept-new")
+    }
 
     if ($ScpPassword) {
         if (-not (Get-Command sshpass -ErrorAction SilentlyContinue)) {
@@ -53,21 +58,22 @@ if ($UploadToTarget) {
         $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ScpPassword)
         try {
             $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-            & sshpass -p $plainPassword scp -o StrictHostKeyChecking=accept-new $vsCodeTarget $intelliJTarget $remoteTarget
+            $env:SSHPASS = $plainPassword
+            & sshpass -e scp @scpArgs $vsCodeTarget $intelliJTarget $remoteTarget
             if ($LASTEXITCODE -ne 0) {
                 throw "scp upload failed with exit code $LASTEXITCODE"
             }
         }
         finally {
+            Remove-Item Env:SSHPASS -ErrorAction SilentlyContinue
             if ($bstr -ne [IntPtr]::Zero) {
                 [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
             }
-            $plainPassword = $null
         }
     }
     else {
         Write-Host "No ScpPassword provided. scp will prompt for the password interactively."
-        & scp -o StrictHostKeyChecking=accept-new $vsCodeTarget $intelliJTarget $remoteTarget
+        & scp @scpArgs $vsCodeTarget $intelliJTarget $remoteTarget
         if ($LASTEXITCODE -ne 0) {
             throw "scp upload failed with exit code $LASTEXITCODE"
         }
