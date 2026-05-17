@@ -8,7 +8,7 @@ devmachine_intellij_sha256: ""
 devmachine_intellij_install_dir: /opt/jetbrains
 devmachine_intellij_symlink: /usr/local/bin/idea
 
-# Override with your Nexus URL, e.g. https://nexus.company.tld/repository
+# Placeholder: must be overridden with your real Nexus URL, e.g. https://nexus.company.tld/repository
 devmachine_nexus_base_url: https://nexus.example.com/repository
 devmachine_dnf_repo_name: nexus-rhel9-baseos
 devmachine_dnf_repo_description: Nexus mirror for RHEL 9 BaseOS
