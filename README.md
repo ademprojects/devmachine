@@ -31,10 +31,15 @@ Standardwerte stehen in `roles/devmachine/defaults/main.yml` und können via `-e
 
 - `devmachine_nexus_base_url`
 - `devmachine_dnf_repo_url`
+- `devmachine_dnf_gpgcheck`
+- `devmachine_dnf_gpgkey`
 - `devmachine_npm_registry_url`
 - `devmachine_pyenv_mirror_url`
 - `devmachine_pip_index_url`
 - `devmachine_target_user`
+- `devmachine_user_home`
+- `devmachine_vscode_sha256`
+- `devmachine_intellij_sha256`
 
 ## Ausführung
 

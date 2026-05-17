@@ -1,7 +1,9 @@
 ---
 devmachine_package_dir: /opt/devmachine/packages
 devmachine_vscode_rpm: code-latest.x86_64.rpm
+devmachine_vscode_sha256: ""
 devmachine_intellij_archive: ideaIC-latest.tar.gz
+devmachine_intellij_sha256: ""
 devmachine_intellij_install_dir: /opt/jetbrains
 devmachine_intellij_symlink: /usr/local/bin/idea
 
@@ -9,12 +11,14 @@ devmachine_nexus_base_url: http://nexus.example.com/repository
 devmachine_dnf_repo_name: nexus-rhel9-baseos
 devmachine_dnf_repo_description: Nexus mirror for RHEL 9 BaseOS
 devmachine_dnf_repo_url: "{{ devmachine_nexus_base_url }}/rhel9-baseos/"
+devmachine_dnf_gpgcheck: true
+devmachine_dnf_gpgkey: "{{ devmachine_nexus_base_url }}/rhel9-baseos/RPM-GPG-KEY-RHEL-9"
 devmachine_npm_registry_url: "{{ devmachine_nexus_base_url }}/npm-group/"
 devmachine_pyenv_mirror_url: "{{ devmachine_nexus_base_url }}/pyenv-mirror/"
 devmachine_pip_index_url: "{{ devmachine_nexus_base_url }}/pypi/simple/"
 
 devmachine_target_user: "{{ ansible_user_id }}"
-devmachine_user_home: "{{ '/root' if devmachine_target_user == 'root' else '/home/' + devmachine_target_user }}"
+devmachine_user_home: ""
 
 devmachine_java_packages:
   - java-17-openjdk-devel
