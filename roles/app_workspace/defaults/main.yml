@@ -1,0 +1,4 @@
+---
+app_workspace_root: "{{ storage_mount_point | default('/mnt/data') }}/work"
+app_workspace_link_name: work
+vm_owner: []

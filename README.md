@@ -2,10 +2,11 @@
 
 Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 
-- VS Code (Linux RPM aus `roles/ide_vscode/files/`)
-- VS Code Plugins (alle `*.vsix` aus `roles/ide_vscode/files/plugins/` werden auto-discovered)
-- IntelliJ IDEA (Linux tar.gz aus `roles/ide_intellij/files/`, Plugins als `.zip`/`.jar` aus `roles/ide_intellij/files/plugins/`)
-- Google Chrome (RPM aus `roles/chrome/files/`)
+- VS Code (Linux RPM aus `roles/app_vscode/files/`)
+- VS Code Plugins (alle `*.vsix` aus `roles/app_vscode/files/plugins/` werden auto-discovered)
+- IntelliJ IDEA (Linux tar.gz aus `roles/app_intellij/files/`, Plugins als `.zip`/`.jar` aus `roles/app_intellij/files/plugins/`)
+- Google Chrome (RPM aus `roles/app_chrome/files/`)
+- Postman (Tarball aus `roles/app_postman/files/`)
 - XFCE-Desktop mit xrdp (RDP-Zugriff für `vm_owner[0]`)
 - Podman (rootless für `vm_owner[0]`)
 - pyenv + aktuelle Python-Version via Nexus für `vm_owner[0]`
@@ -20,11 +21,12 @@ Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 
 - Steuerrechner mit Ansible
 - Zielsystem(e): RHEL 9.6
-- Die Quell-Pakete liegen in den Rollen-Ordnern `roles/ide_vscode/files/` (RPM, VSIX-Plugins
+- Die Quell-Pakete liegen in den Rollen-Ordnern `roles/app_vscode/files/` (RPM, VSIX-Plugins
   unter `files/plugins/`),
-  `roles/ide_intellij/files/` (tar.gz, Plugins unter `files/plugins/`) und `roles/app_chrome/files/` (Chrome-RPM) — werden manuell
+  `roles/app_intellij/files/` (tar.gz, Plugins unter `files/plugins/`), `roles/app_chrome/files/` (Chrome-RPM)
+  und `roles/app_postman/files/` (Postman-Tarball) — werden manuell
   dort hineinkopiert.
-- EPEL-Pakete müssen via dnf installierbar sein. Die Rollen `xrdp` (XFCE + xrdp) und
+- EPEL-Pakete müssen via dnf installierbar sein. Die Rollen `common_xrdp` (XFCE + xrdp) und
   `app_cli` (mosh + ripgrep + fd-find) ziehen aus EPEL. Wenn dein Nexus EPEL nicht spiegelt,
   vorher den EPEL-Mirror als zusätzliches `yum_repository` einrichten (analog zum
   bestehenden `nexus-rhel9-baseos`).
@@ -69,29 +71,55 @@ Wenn `-ScpPassword` genutzt wird, nutzt `sshpass` intern die Umgebungsvariable `
 Danach die Dateien in die jeweiligen Rollen-Ordner kopieren:
 
 ```bash
-cp ./downloads/code-1.120.0-1778619100.el8.x86_64.rpm ./roles/ide_vscode/files/
-cp ./downloads/*.vsix                                 ./roles/ide_vscode/files/plugins/
-cp ./downloads/idea-2026.1.2.tar.gz                   ./roles/ide_intellij/files/
-cp ./downloads/intellij-plugins/*.zip                 ./roles/ide_intellij/files/plugins/
+cp ./downloads/code-1.120.0-1778619100.el8.x86_64.rpm ./roles/app_vscode/files/
+cp ./downloads/*.vsix                                 ./roles/app_vscode/files/plugins/
+cp ./downloads/idea-2026.1.2.tar.gz                   ./roles/app_intellij/files/
+cp ./downloads/intellij-plugins/*.zip                 ./roles/app_intellij/files/plugins/
 ```
 
-Die Rollen `ide_vscode` und `ide_intellij` kopieren die Dateien dann auf den Zielhost und
+Die Rollen `app_vscode` und `app_intellij` kopieren die Dateien dann auf den Zielhost und
 installieren VS Code (systemweit, plus VSIX-Extensions für `vm_owner[0]`) bzw. IntelliJ
 (systemweit unter `/opt/jetbrains/idea-*` mit Symlink `/usr/local/bin/idea`).
+
+## VS Code- und IntelliJ-Plugins per Skript holen
+
+```bash
+bash tools/download-ide-plugins.sh
+```
+
+Lädt die in der `VSCODE_EXTENSIONS`- und `INTELLIJ_PLUGINS`-Liste im Skript konfigurierten
+Plugins per `curl` aus Marketplace bzw. JetBrains-Marketplace nach
+`roles/app_vscode/files/plugins/` und `roles/app_intellij/files/plugins/`. Die Rollen
+ziehen alle dort liegenden `*.vsix` bzw. `*.zip` automatisch (Auto-Discovery, keine
+Plugin-Liste in Defaults pflegen).
+
+## Standalone-Tools per Skript holen
+
+```bash
+bash tools/download-tools.sh
+```
+
+Lädt aktuell den Postman-Tarball nach `roles/app_postman/files/`. Pattern: das Skript holt
+die Quelle, du committest die Datei (oder lässt sie .gitignored), die Rolle installiert
+beim nächsten Playbook-Lauf.
 
 ## Konfiguration
 
 Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und können via `-e`
 überschrieben werden, z. B.:
 
-`ide`-Rolle (Workspace + sudo für vm_owner):
+`app_workspace`-Rolle:
 
-- `devmachine_sudo_nopasswd` — wenn `true`, passwordless sudo für `vm_owner[0]` in `/etc/sudoers.d/`.
-- `devmachine_workspace_setup_enabled` — Workspace-Dir + `~/work`-Symlink für `vm_owner[0]`.
-- `devmachine_workspace_root` (Default `/mnt/data/workspaces`), `devmachine_workspace_link_name`
-  (Default `work`).
+- `app_workspace_root` (Default `{{ storage_mount_point }}/work`, also `/mnt/data/work`) — Verzeichnis
+  unter dem Daten-Mount für alle Projekte des Users.
+- `app_workspace_link_name` (Default `work`) — Name des Symlinks im Home-Verzeichnis.
 
-`ide_vscode`-Rolle:
+`common_sudo`-Rolle:
+
+- `common_sudo_nopasswd` (Default `false`) — wenn `true`, passwordless sudo für `vm_owner[0]`
+  in `/etc/sudoers.d/{{ vm_owner[0] }}`.
+
+`app_vscode`-Rolle:
 
 - `ide_vscode_rpm` — Dateiname des VS Code RPMs in `files/`.
 - `ide_vscode_sha256` — optionale SHA256-Prüfung des RPMs.
@@ -100,7 +128,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
   Alle `*.vsix` darin werden automatisch erkannt, auf den Host kopiert und für `vm_owner[0]`
   installiert. Drop-File → nächster Lauf zieht es hoch.
 
-`ide_intellij`-Rolle:
+`app_intellij`-Rolle:
 
 - `ide_intellij_archive` — Dateiname des IntelliJ-Tarballs in `files/`.
 - `ide_intellij_sha256` — optionale SHA256-Prüfung des Tarballs.
@@ -117,6 +145,18 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 - `app_chrome_rpm`
 - `app_chrome_sha256`
 - `app_chrome_package_dir`
+
+`app_postman`-Rolle:
+
+- `app_postman_package_dir` — Staging-Verzeichnis auf dem Host.
+- `app_postman_install_dir` (Default `/opt/Postman`) — Zielverzeichnis nach Extraction.
+- `app_postman_executable_name` (Default `Postman`) — Name des Launcher-Binarys im Install-Dir.
+- `app_postman_symlink` (Default `/usr/local/bin/postman`).
+- `app_postman_desktop_entry` / `app_postman_desktop_icon` — Pfad + Icon-Pfad
+  für `/usr/share/applications/postman.desktop`. Icon-Default zeigt auf den Standard-Pfad
+  innerhalb des Tarballs; bei abweichender Struktur per host_vars überschreiben.
+- Tarball wird per Auto-Discovery aus `roles/app_postman/files/*.tar.gz` erkannt;
+  genau ein Tarball muss vorhanden sein.
 
 `app_git`-Rolle:
 
@@ -136,9 +176,9 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
   ```yaml
   app_git_repos:
     - repo: git@github.com:org/service-a.git
-      target: /mnt/data/workspaces/huhu/git/service-a
+      target: /mnt/data/work/git/service-a
     - repo: git@github.com:org/service-b.git
-      target: /mnt/data/workspaces/huhu/git/service-b
+      target: /mnt/data/work/git/service-b
   ```
 
 `app_podman`-Rolle:
@@ -243,6 +283,16 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 - `app_cli_mosh_open_firewall` / `app_cli_mosh_firewall_port_min` / `app_cli_mosh_firewall_port_max`
   — UDP-Range für mosh (Default `60000-61000/udp`).
 
+`common_dev_firewall`-Rolle:
+
+- `common_dev_firewall_enabled` (Default `true`) — Gating-Flag.
+- `common_dev_firewall_tcp_ports` (Default `[]`) — Liste von Ports/Ranges (Strings wie `"3000"`
+  oder `"3000-3010"`), die in firewalld permanent für TCP geöffnet werden. firewalld wird
+  per Handler einmalig reloaded wenn ein Port hinzukam.
+- `common_dev_firewall_udp_ports` (Default `[]`) — dito für UDP.
+- Typische Frontend-Dev-Server-Ports (3000/5173/8080/4200/8000) als Vorschlag in den Defaults
+  kommentiert — du aktivierst nur was du brauchst, pro host_vars.
+
 `common_sshd`-Rolle:
 
 - `common_sshd_dropin_path` — Pfad des sshd-Drop-ins (Default `/etc/ssh/sshd_config.d/50-devmachine.conf`).
@@ -255,7 +305,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 - `common_sshd_allow_agent_forwarding`, `common_sshd_allow_tcp_forwarding`, `common_sshd_x11_forwarding`
   — Forwarding-Policy.
 
-`xrdp`-Rolle:
+`common_xrdp`-Rolle:
 
 - `xrdp_packages`
 - `xrdp_xfce_packages`
@@ -287,7 +337,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 Empfohlen: nur `devmachine_nexus_fqdn` und `devmachine_proxy_fqdn` pro Server setzen; die übrigen
 Nexus-/Proxy-URLs werden standardmäßig daraus abgeleitet.
 
-Passwordless sudo für `vm_owner[0]` ist **disabled by default**; setze `devmachine_sudo_nopasswd: true`
+Passwordless sudo für `vm_owner[0]` ist **disabled by default**; setze `common_sudo_nopasswd: true`
 um es zu aktivieren.
 
 Alle per-User-Tasks (Workspace, `~/.npmrc`, `~/.pip/pip.conf`, VS Code-Extensions, sudo, Git-Identity,
@@ -374,7 +424,7 @@ Podman rootless:
 
 xrdp / XFCE:
 
-- Rolle `xrdp` installiert XFCE + xrdp, aktiviert den Service und legt für `vm_owner[0]`
+- Rolle `common_xrdp` installiert XFCE + xrdp, aktiviert den Service und legt für `vm_owner[0]`
   `~/.xsession` **und** `~/.Xclients` an, beide mit `exec xfce4-session`.
 - `/etc/skel/.xsession` und `/etc/skel/.Xclients` werden als Defaults für zukünftig angelegte
   User gesetzt (abschaltbar via `xrdp_skel_enabled: false`).
@@ -406,13 +456,14 @@ Storage / Workspace-Mount:
   werden idempotent erkannt.
 - Implementiert ausschließlich mit `ansible.builtin`-Modulen (LVM-CLI via `command`); keine
   Galaxy-Collections erforderlich.
-- Workspace-Pfad der `ide`-Rolle (`devmachine_workspace_root`, Default `/mnt/data/workspaces`)
-  liegt unter dem Mount, sobald `common_storage` aktiv ist.
+- Workspace-Pfad der `app_workspace`-Rolle (Default `/mnt/data/work`) liegt unter dem Mount,
+  sobald `common_storage` aktiv ist.
+- Podman-Container-Storage (`app_podman_storage_base`, Default `/mnt/data/containers`) ebenfalls.
 
-Workspace Defaults:
+Workspace:
 
-- `vm_owner[0]` bekommt einen Workspace unter `{{ devmachine_workspace_root }}/{{ vm_owner[0] }}`
-  + Symlink `~/{{ devmachine_workspace_link_name }}` (Default `~/work`).
+- `vm_owner[0]` bekommt einen Workspace unter `{{ app_workspace_root }}` (Default `/mnt/data/work/`)
+  + Symlink `~/{{ app_workspace_link_name }}` (Default `~/work`).
 
 ## Ausführung
 

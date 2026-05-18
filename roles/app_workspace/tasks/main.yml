@@ -19,11 +19,11 @@
 
 - name: Resolve target user home directory
   ansible.builtin.set_fact:
-    ide_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
+    app_workspace_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
 
 - name: Resolve target user primary group
   ansible.builtin.set_fact:
-    ide_user_group: >-
+    app_workspace_user_group: >-
       {{
         ansible_facts.getent_group
         | dict2items
@@ -35,39 +35,20 @@
 - name: Ensure target user primary group was resolved
   ansible.builtin.assert:
     that:
-      - ide_user_group | length > 0
+      - app_workspace_user_group | length > 0
     fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
 
-- name: Ensure workspace root directory exists
+- name: Ensure workspace directory exists
   ansible.builtin.file:
-    path: "{{ devmachine_workspace_root }}"
-    state: directory
-    mode: "0755"
-  when: devmachine_workspace_setup_enabled | bool
-
-- name: Ensure vm_owner workspace directory exists
-  ansible.builtin.file:
-    path: "{{ devmachine_workspace_root }}/{{ vm_owner[0] }}"
+    path: "{{ app_workspace_root }}"
     state: directory
     owner: "{{ vm_owner[0] }}"
-    group: "{{ ide_user_group }}"
+    group: "{{ app_workspace_user_group }}"
     mode: "0755"
-  when: devmachine_workspace_setup_enabled | bool
 
-- name: Ensure workspace symlink exists in vm_owner home
+- name: Ensure workspace symlink in vm_owner home
   ansible.builtin.file:
-    src: "{{ devmachine_workspace_root }}/{{ vm_owner[0] }}"
-    dest: "{{ ide_user_home }}/{{ devmachine_workspace_link_name }}"
+    src: "{{ app_workspace_root }}"
+    dest: "{{ app_workspace_user_home }}/{{ app_workspace_link_name }}"
     state: link
     force: true
-  when: devmachine_workspace_setup_enabled | bool
-
-- name: Configure passwordless sudo for vm_owner
-  ansible.builtin.copy:
-    dest: "/etc/sudoers.d/{{ vm_owner[0] }}"
-    content: "{{ vm_owner[0] }} ALL=(ALL) NOPASSWD:ALL\n"
-    owner: root
-    group: root
-    mode: "0440"
-    validate: "/usr/sbin/visudo -cf %s"
-  when: devmachine_sudo_nopasswd | bool

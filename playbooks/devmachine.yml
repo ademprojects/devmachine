@@ -11,12 +11,15 @@
     - role: common_sysctl
     - role: common_locale
     - role: common_sshd
-    - role: ide
+    - role: common_dev_firewall
+    - role: common_sudo
+    - role: app_workspace
     - role: app_cli
-    - role: ide_vscode
-    - role: ide_intellij
+    - role: app_vscode
+    - role: app_intellij
     - role: app_chrome
-    - role: xrdp
+    - role: app_postman
+    - role: common_xrdp
     - role: app_podman
     - role: app_java
     - role: app_pyenv

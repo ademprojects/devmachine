@@ -1,0 +1,55 @@
+---
+- name: Check whether firewalld is active
+  ansible.builtin.command:
+    cmd: systemctl is-active firewalld
+  register: common_dev_firewall_state
+  changed_when: false
+  failed_when: false
+
+- name: Query firewalld for configured TCP ports
+  ansible.builtin.command:
+    cmd: "firewall-cmd --permanent --query-port={{ item }}/tcp"
+  register: common_dev_firewall_tcp_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ common_dev_firewall_tcp_ports }}"
+  when:
+    - common_dev_firewall_enabled | bool
+    - common_dev_firewall_state.stdout | trim == 'active'
+
+- name: Add TCP ports to firewalld permanent ruleset
+  ansible.builtin.command:
+    cmd: "firewall-cmd --permanent --add-port={{ item.item }}/tcp"
+  loop: "{{ common_dev_firewall_tcp_check.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('?') }}/tcp"
+  when:
+    - common_dev_firewall_enabled | bool
+    - common_dev_firewall_state.stdout | trim == 'active'
+    - item.rc is defined
+    - item.rc != 0
+  notify: Reload firewalld
+
+- name: Query firewalld for configured UDP ports
+  ansible.builtin.command:
+    cmd: "firewall-cmd --permanent --query-port={{ item }}/udp"
+  register: common_dev_firewall_udp_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ common_dev_firewall_udp_ports }}"
+  when:
+    - common_dev_firewall_enabled | bool
+    - common_dev_firewall_state.stdout | trim == 'active'
+
+- name: Add UDP ports to firewalld permanent ruleset
+  ansible.builtin.command:
+    cmd: "firewall-cmd --permanent --add-port={{ item.item }}/udp"
+  loop: "{{ common_dev_firewall_udp_check.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('?') }}/udp"
+  when:
+    - common_dev_firewall_enabled | bool
+    - common_dev_firewall_state.stdout | trim == 'active'
+    - item.rc is defined
+    - item.rc != 0
+  notify: Reload firewalld

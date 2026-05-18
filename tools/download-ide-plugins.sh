@@ -12,8 +12,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VSCODE_DIR="$REPO_ROOT/roles/ide_vscode/files/plugins"
-INTELLIJ_DIR="$REPO_ROOT/roles/ide_intellij/files/plugins"
+VSCODE_DIR="$REPO_ROOT/roles/app_vscode/files/plugins"
+INTELLIJ_DIR="$REPO_ROOT/roles/app_intellij/files/plugins"
 
 mkdir -p "$VSCODE_DIR" "$INTELLIJ_DIR"
 
@@ -43,6 +43,9 @@ VSCODE_EXTENSIONS=(
 
   # GitLab CI / pipeline editing and validation
   gitlab.gitlab-workflow
+
+  # Testing
+  ms-playwright.playwright
 )
 
 # IntelliJ plugins: numeric plugin IDs from plugins.jetbrains.com.

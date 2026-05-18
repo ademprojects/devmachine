@@ -1,6 +1,0 @@
----
-devmachine_sudo_nopasswd: false
-devmachine_workspace_setup_enabled: true
-devmachine_workspace_root: /mnt/data/workspaces
-devmachine_workspace_link_name: work
-vm_owner: []

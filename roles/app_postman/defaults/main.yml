@@ -1,0 +1,7 @@
+---
+app_postman_package_dir: /opt/devmachine/packages
+app_postman_install_dir: /opt/Postman
+app_postman_executable_name: Postman
+app_postman_symlink: /usr/local/bin/postman
+app_postman_desktop_entry: /usr/share/applications/postman.desktop
+app_postman_desktop_icon: /opt/Postman/app/resources/app/assets/icon.png

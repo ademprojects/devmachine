@@ -1,0 +1,12 @@
+---
+common_dev_firewall_enabled: true
+# Each entry is a string accepted by firewall-cmd --add-port, e.g.
+# "3000" for a single port or "3000-3010" for a range.
+common_dev_firewall_tcp_ports: []
+common_dev_firewall_udp_ports: []
+# Typical frontend dev server ports — copy into your host_vars as needed:
+#   - "3000"   React / Next.js / generic Node dev servers
+#   - "5173"   Vite
+#   - "8080"   Spring Boot / Tomcat
+#   - "4200"   Angular CLI
+#   - "8000"   Django / Python http.server

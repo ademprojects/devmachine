@@ -1,0 +1,74 @@
+---
+- name: Discover Postman tarball in role files
+  ansible.builtin.set_fact:
+    app_postman_tarball_files: >-
+      {{
+        query('fileglob', role_path ~ '/files/*.tar.gz')
+        | map('basename')
+        | reject('match', '^\\.')
+        | sort
+      }}
+  run_once: true
+
+- name: Fail when no Postman tarball is present in role files
+  ansible.builtin.fail:
+    msg: >-
+      No Postman tarball found in roles/app_postman/files/.
+      Run `tools/download-tools.sh` on the controller to fetch the latest one.
+  when: app_postman_tarball_files | length == 0
+  run_once: true
+
+- name: Fail when more than one Postman tarball is present
+  ansible.builtin.fail:
+    msg: >-
+      Multiple Postman tarballs found in roles/app_postman/files/
+      ({{ app_postman_tarball_files | join(', ') }}). Keep only one.
+  when: app_postman_tarball_files | length > 1
+  run_once: true
+
+- name: Ensure Postman package directory exists
+  ansible.builtin.file:
+    path: "{{ app_postman_package_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy Postman tarball to remote host
+  ansible.builtin.copy:
+    src: "{{ app_postman_tarball_files[0] }}"
+    dest: "{{ app_postman_package_dir }}/{{ app_postman_tarball_files[0] }}"
+    mode: "0644"
+
+- name: Extract Postman tarball
+  ansible.builtin.unarchive:
+    src: "{{ app_postman_package_dir }}/{{ app_postman_tarball_files[0] }}"
+    dest: "{{ app_postman_install_dir | dirname }}"
+    remote_src: true
+    owner: root
+    group: root
+
+- name: Symlink Postman launcher
+  ansible.builtin.file:
+    src: "{{ app_postman_install_dir }}/{{ app_postman_executable_name }}"
+    dest: "{{ app_postman_symlink }}"
+    state: link
+    force: true
+
+- name: Write Postman desktop entry
+  ansible.builtin.copy:
+    dest: "{{ app_postman_desktop_entry }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Postman
+      GenericName=API Tool
+      Comment=Postman API Platform
+      Exec={{ app_postman_symlink }} %U
+      Icon={{ app_postman_desktop_icon }}
+      Terminal=false
+      Categories=Development;Network;Utility;
+      StartupWMClass=Postman
