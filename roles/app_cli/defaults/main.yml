@@ -13,7 +13,11 @@ app_cli_packages:
   - vim-enhanced
   - mosh
   - bash-completion
+  - git
   - wget
+  - curl
+  - unzip
+  - tar
   - which
   - file
 app_cli_mosh_open_firewall: true

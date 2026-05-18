@@ -1,0 +1,25 @@
+---
+- name: Write /etc/dnf.conf
+  ansible.builtin.copy:
+    dest: "{{ common_packages_dnf_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible role common_packages. Do not edit by hand.
+      [main]
+      gpgcheck={{ 1 if common_packages_gpgcheck else 0 }}
+      installonly_limit={{ common_packages_installonly_limit }}
+      clean_requirements_on_remove={{ 'True' if common_packages_clean_requirements_on_remove else 'False' }}
+      keepcache={{ 'True' if common_packages_keepcache else 'False' }}
+      best={{ 'True' if common_packages_best else 'False' }}
+      skip_if_unavailable={{ 'True' if common_packages_skip_if_unavailable else 'False' }}
+      {% if common_packages_proxy_url | length > 0 %}
+      proxy={{ common_packages_proxy_url }}
+      {% endif %}
+
+- name: Update all system packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+  when: common_packages_full_update_enabled | bool

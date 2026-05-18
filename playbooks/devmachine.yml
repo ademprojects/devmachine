@@ -6,6 +6,8 @@
   roles:
     - role: common_storage
       when: storage_setup_enabled | default(false) | bool
+    - role: common_packages
+    - role: common_nexus
     - role: common_sysctl
     - role: common_locale
     - role: common_sshd

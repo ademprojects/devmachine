@@ -8,6 +8,11 @@
       - vm_owner[0] | length > 0
     fail_msg: "vm_owner must be a list with exactly one user name."
 
+- name: Install pyenv build dependencies (gcc, make, *-devel for Python source build)
+  ansible.builtin.dnf:
+    name: "{{ app_pyenv_build_dependencies }}"
+    state: present
+
 - name: Read passwd entry for vm_owner
   ansible.builtin.getent:
     database: passwd
@@ -133,3 +138,21 @@
     HOME: "{{ app_pyenv_user_home }}"
     PYENV_ROOT: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
   changed_when: false
+
+- name: Ensure pip config directory exists for vm_owner
+  ansible.builtin.file:
+    path: "{{ app_pyenv_user_home }}/.pip"
+    state: directory
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_pyenv_user_group }}"
+    mode: "0755"
+
+- name: Configure pip index to Nexus for vm_owner
+  ansible.builtin.copy:
+    dest: "{{ app_pyenv_user_home }}/.pip/pip.conf"
+    content: |
+      [global]
+      index-url = {{ app_pyenv_pip_index_url }}
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_pyenv_user_group }}"
+    mode: "0644"

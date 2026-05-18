@@ -6,4 +6,15 @@ app_pyenv_python_build_mirror_url: "{{ devmachine_nexus_base_url }}/pyenv-mirror
 app_pyenv_profile_path: /etc/profile.d/app-pyenv.sh
 app_pyenv_python_version: "3.14.5"
 app_pyenv_proxy_url: "{{ devmachine_proxy_url }}"
+app_pyenv_pip_index_url: "{{ devmachine_pip_index_url }}"
+app_pyenv_build_dependencies:
+  - gcc
+  - make
+  - openssl-devel
+  - bzip2-devel
+  - libffi-devel
+  - zlib-devel
+  - readline-devel
+  - sqlite-devel
+  - xz-devel
 vm_owner: []

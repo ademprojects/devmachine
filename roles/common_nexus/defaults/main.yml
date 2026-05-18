@@ -1,0 +1,28 @@
+---
+# Endpoint definitions (set per server / group)
+devmachine_nexus_scheme: https
+devmachine_nexus_fqdn: nexus.example.com
+devmachine_nexus_repository_path: /repository
+devmachine_proxy_scheme: http
+devmachine_proxy_fqdn: proxy.example.com
+devmachine_proxy_port: 3128
+
+# Derived endpoint URLs
+devmachine_nexus_base_url: "{{ devmachine_nexus_scheme }}://{{ devmachine_nexus_fqdn }}{{ devmachine_nexus_repository_path }}"
+devmachine_proxy_url: "{{ devmachine_proxy_scheme }}://{{ devmachine_proxy_fqdn }}:{{ devmachine_proxy_port }}"
+
+# Nexus-backed DNF repository
+devmachine_dnf_repo_name: nexus-rhel9-baseos
+devmachine_dnf_repo_description: Nexus mirror for RHEL 9 BaseOS
+devmachine_dnf_repo_url: "{{ devmachine_nexus_base_url }}/rhel9-baseos/"
+devmachine_dnf_gpgcheck: true
+devmachine_dnf_gpgkey: "{{ devmachine_nexus_base_url }}/rhel9-baseos/RPM-GPG-KEY-RHEL-9"
+
+# Nexus-backed package / mirror URLs consumed by other roles
+devmachine_npm_registry_url: "{{ devmachine_nexus_base_url }}/npm-group/"
+devmachine_pyenv_mirror_url: "{{ devmachine_nexus_base_url }}/pyenv-mirror/"
+devmachine_pip_index_url: "{{ devmachine_nexus_base_url }}/pypi/simple/"
+
+# Shell defaults written to /etc/profile.d
+common_nexus_profile_path: /etc/profile.d/devmachine-nexus.sh
+common_nexus_no_proxy: "localhost,127.0.0.1"

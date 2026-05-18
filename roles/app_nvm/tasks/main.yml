@@ -102,3 +102,12 @@
     NVM_DIR: "{{ app_nvm_user_home }}/{{ app_nvm_install_subdir }}"
   changed_when: false
   when: app_nvm_set_default | bool
+
+- name: Configure npm registry to Nexus for vm_owner
+  ansible.builtin.copy:
+    dest: "{{ app_nvm_user_home }}/.npmrc"
+    content: |
+      registry={{ app_nvm_npm_registry_url }}
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_nvm_user_group }}"
+    mode: "0644"

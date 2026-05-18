@@ -1,0 +1,25 @@
+---
+- name: Configure Nexus as DNF repository
+  ansible.builtin.yum_repository:
+    name: "{{ devmachine_dnf_repo_name }}"
+    description: "{{ devmachine_dnf_repo_description }}"
+    baseurl: "{{ devmachine_dnf_repo_url }}"
+    enabled: true
+    gpgcheck: "{{ devmachine_dnf_gpgcheck }}"
+    gpgkey: "{{ devmachine_dnf_gpgkey if (devmachine_dnf_gpgkey | length > 0) else omit }}"
+
+- name: Write Nexus and proxy environment defaults to /etc/profile.d
+  ansible.builtin.copy:
+    dest: "{{ common_nexus_profile_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible role common_nexus. Do not edit by hand.
+      export PIP_INDEX_URL="{{ devmachine_pip_index_url }}"
+      export HTTP_PROXY="{{ devmachine_proxy_url }}"
+      export HTTPS_PROXY="{{ devmachine_proxy_url }}"
+      export http_proxy="{{ devmachine_proxy_url }}"
+      export https_proxy="{{ devmachine_proxy_url }}"
+      export NO_PROXY="{{ common_nexus_no_proxy }}"
+      export no_proxy="{{ common_nexus_no_proxy }}"

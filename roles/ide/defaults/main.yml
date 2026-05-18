@@ -1,56 +1,6 @@
 ---
-# Central endpoint definitions (set once per server)
-devmachine_nexus_scheme: https
-devmachine_nexus_fqdn: nexus.example.com
-devmachine_nexus_repository_path: /repository
-devmachine_proxy_scheme: http
-devmachine_proxy_fqdn: proxy.example.com
-devmachine_proxy_port: 3128
-
-# Derived endpoint URLs
-devmachine_nexus_base_url: "{{ devmachine_nexus_scheme }}://{{ devmachine_nexus_fqdn }}{{ devmachine_nexus_repository_path }}"
-devmachine_proxy_url: "{{ devmachine_proxy_scheme }}://{{ devmachine_proxy_fqdn }}:{{ devmachine_proxy_port }}"
-devmachine_dnf_repo_name: nexus-rhel9-baseos
-devmachine_dnf_repo_description: Nexus mirror for RHEL 9 BaseOS
-devmachine_dnf_repo_url: "{{ devmachine_nexus_base_url }}/rhel9-baseos/"
-devmachine_dnf_gpgcheck: true
-devmachine_dnf_gpgkey: "{{ devmachine_nexus_base_url }}/rhel9-baseos/RPM-GPG-KEY-RHEL-9"
-devmachine_npm_registry_url: "{{ devmachine_nexus_base_url }}/npm-group/"
-devmachine_pyenv_mirror_url: "{{ devmachine_nexus_base_url }}/pyenv-mirror/"
-devmachine_pip_index_url: "{{ devmachine_nexus_base_url }}/pypi/simple/"
-
-devmachine_target_users: []
 devmachine_sudo_nopasswd: false
 devmachine_workspace_setup_enabled: true
 devmachine_workspace_root: /mnt/data/workspaces
 devmachine_workspace_link_name: work
-devmachine_shared_workspace_enabled: false
-devmachine_shared_workspace_path: /mnt/data/shared
-devmachine_shared_workspace_owner: ""
-devmachine_shared_workspace_group: ""
-devmachine_general_user_enabled: false
-devmachine_general_user: devuser
-devmachine_general_user_shell: /bin/bash
-devmachine_ansible_login_user: ansible
-devmachine_ansible_login_shell: /bin/bash
-devmachine_ansible_login_ssh_key_path: "{{ lookup('env', 'HOME') }}/.ssh/devmachine_ansible"
-devmachine_ansible_login_ssh_key_comment: ansible@devmachine
-devmachine_ansible_login_ssh_key_passphrase: ""
-devmachine_ansible_login_ssh_key_vault_file: "{{ playbook_dir }}/../inventory/group_vars/all/devmachine_ansible_login.vault.yml"
-devmachine_ansible_login_ssh_key_vault_password_file: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}"
-
-devmachine_java_packages:
-  - git
-  - wget
-  - curl
-  - unzip
-  - tar
-  - gcc
-  - make
-  - openssl-devel
-  - bzip2-devel
-  - libffi-devel
-  - zlib-devel
-  - readline-devel
-  - sqlite-devel
-  - xz-devel
+vm_owner: []

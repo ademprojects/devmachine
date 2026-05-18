@@ -1,0 +1,10 @@
+---
+common_packages_dnf_config_path: /etc/dnf.conf
+common_packages_proxy_url: "{{ devmachine_proxy_url }}"
+common_packages_gpgcheck: true
+common_packages_installonly_limit: 3
+common_packages_clean_requirements_on_remove: true
+common_packages_keepcache: false
+common_packages_best: false
+common_packages_skip_if_unavailable: false
+common_packages_full_update_enabled: false

@@ -84,34 +84,12 @@ installieren VS Code (systemweit, plus VSIX-Extensions für `vm_owner[0]`) bzw. 
 Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und können via `-e`
 überschrieben werden, z. B.:
 
-`ide`-Rolle (Nexus, Java, ansible-Login, Workspaces, npm/pip/pyenv, sudo):
+`ide`-Rolle (Workspace + sudo für vm_owner):
 
-- `devmachine_nexus_fqdn`
-- `devmachine_proxy_fqdn`
-- `devmachine_nexus_base_url`
-- `devmachine_dnf_repo_url`
-- `devmachine_dnf_gpgcheck`
-- `devmachine_dnf_gpgkey`
-- `devmachine_npm_registry_url`
-- `devmachine_pyenv_mirror_url`
-- `devmachine_pip_index_url`
-- `devmachine_target_users`
-- `devmachine_sudo_nopasswd`
-- `devmachine_workspace_setup_enabled`
-- `devmachine_workspace_root`
-- `devmachine_workspace_link_name`
-- `devmachine_shared_workspace_enabled`
-- `devmachine_shared_workspace_path`
-- `devmachine_shared_workspace_owner`
-- `devmachine_shared_workspace_group`
-- `devmachine_general_user_enabled`
-- `devmachine_general_user`
-- `devmachine_general_user_shell`
-- `devmachine_ansible_login_user`
-- `devmachine_ansible_login_ssh_key_path`
-- `devmachine_ansible_login_ssh_key_passphrase`
-- `devmachine_ansible_login_ssh_key_vault_file`
-- `devmachine_ansible_login_ssh_key_vault_password_file`
+- `devmachine_sudo_nopasswd` — wenn `true`, passwordless sudo für `vm_owner[0]` in `/etc/sudoers.d/`.
+- `devmachine_workspace_setup_enabled` — Workspace-Dir + `~/work`-Symlink für `vm_owner[0]`.
+- `devmachine_workspace_root` (Default `/mnt/data/workspaces`), `devmachine_workspace_link_name`
+  (Default `work`).
 
 `ide_vscode`-Rolle:
 
@@ -189,6 +167,8 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 - `app_pyenv_python_version` — zu installierende Python-Version (Default `3.14.5`). Leer = automatische
   Auflösung der höchsten 3.x.y aus `pyenv install --list`.
 - `app_pyenv_python_build_mirror_url` — Python-Source-Tarball-Mirror auf Nexus.
+- `app_pyenv_pip_index_url` — pip-Index für `~vm_owner/.pip/pip.conf` (Default = `devmachine_pip_index_url`).
+- `app_pyenv_build_dependencies` — Pakete für `pyenv install` (gcc, make, *-devel).
 - `app_pyenv_proxy_url` — HTTP/HTTPS-Proxy für den `pyenv install`-Lauf (Default = `devmachine_proxy_url`).
 - `app_pyenv_install_subdir` — Verzeichnisname unter `~vm_owner` (Default `.pyenv`).
 - `app_pyenv_profile_path` — Pfad der erzeugten `/etc/profile.d/`-Datei.
@@ -220,8 +200,28 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
   „latest LTS" via nvm-Resolver.
 - `app_nvm_set_default` — Default-Alias über `nvm alias default` setzen.
 - `app_nvm_nodejs_mirror_url` — Node-Tarball-Mirror auf Nexus.
+- `app_nvm_npm_registry_url` — npm-Registry für `~vm_owner/.npmrc` (Default = `devmachine_npm_registry_url`).
 - `app_nvm_proxy_url` — HTTP/HTTPS-Proxy für den `nvm install`-Lauf.
 - `app_nvm_install_subdir`, `app_nvm_profile_path` — Verzeichnis und Profile-Snippet.
+
+`common_nexus`-Rolle (Foundation — alle anderen Rollen referenzieren die Variablen):
+
+- `devmachine_nexus_fqdn` / `devmachine_nexus_scheme` / `devmachine_nexus_repository_path` — Nexus-Endpoint.
+- `devmachine_proxy_fqdn` / `devmachine_proxy_port` / `devmachine_proxy_scheme` — HTTP-Proxy.
+- `devmachine_nexus_base_url`, `devmachine_proxy_url` — aus obigen abgeleitet.
+- `devmachine_dnf_repo_*` — Konfiguration des Nexus-DNF-Repos (Name, URL, GPG).
+- `devmachine_npm_registry_url`, `devmachine_pip_index_url`, `devmachine_pyenv_mirror_url` — Mirror-URLs.
+- `common_nexus_profile_path` (Default `/etc/profile.d/devmachine-nexus.sh`), `common_nexus_no_proxy`
+  (Default `localhost,127.0.0.1`) — Inhalt des Profile-Snippets (PIP_INDEX_URL + HTTP/HTTPS_PROXY).
+
+`common_packages`-Rolle:
+
+- `common_packages_dnf_config_path` (Default `/etc/dnf.conf`).
+- `common_packages_proxy_url` (Default `{{ devmachine_proxy_url }}`) — wird als `proxy=` in dnf.conf eingetragen.
+- `common_packages_gpgcheck`, `common_packages_installonly_limit`, `common_packages_clean_requirements_on_remove`,
+  `common_packages_keepcache`, `common_packages_best`, `common_packages_skip_if_unavailable` — dnf-Optionen.
+- `common_packages_full_update_enabled` (Default `false`) — wenn `true`, läuft `dnf update *`
+  bei jedem Playbook-Run. Sonst Update-Task wird übersprungen.
 
 `common_sysctl`-Rolle:
 
@@ -287,13 +287,11 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 Empfohlen: nur `devmachine_nexus_fqdn` und `devmachine_proxy_fqdn` pro Server setzen; die übrigen
 Nexus-/Proxy-URLs werden standardmäßig daraus abgeleitet.
 
-Important: `devmachine_target_users` must be set to a non-empty list of real developer accounts (not `runner`).
-Each listed user receives their own workspace, tool configuration (npm/pip/pyenv) and — when
-`devmachine_sudo_nopasswd: true` — a passwordless sudo entry in `/etc/sudoers.d/`.
-Passwordless sudo is **disabled by default**; set `devmachine_sudo_nopasswd: true` to enable it explicitly.
+Passwordless sudo für `vm_owner[0]` ist **disabled by default**; setze `devmachine_sudo_nopasswd: true`
+um es zu aktivieren.
 
-VS Code-Extensions werden nur für `vm_owner[0]` installiert (Rolle `ide_vscode`), nicht für die
-`devmachine_target_users`.
+Alle per-User-Tasks (Workspace, `~/.npmrc`, `~/.pip/pip.conf`, VS Code-Extensions, sudo, Git-Identity,
+xrdp-`.xsession`, podman rootless, etc.) laufen für `vm_owner[0]`.
 
 Git-Workspace:
 
@@ -408,50 +406,31 @@ Storage / Workspace-Mount:
   werden idempotent erkannt.
 - Implementiert ausschließlich mit `ansible.builtin`-Modulen (LVM-CLI via `command`); keine
   Galaxy-Collections erforderlich.
-- Workspace-Pfade der `ide`-Rolle (`devmachine_workspace_root`, `devmachine_shared_workspace_path`)
-  liegen standardmäßig unter `/mnt/data` und nutzen damit den Mount, sobald `common_storage` aktiv ist.
+- Workspace-Pfad der `ide`-Rolle (`devmachine_workspace_root`, Default `/mnt/data/workspaces`)
+  liegt unter dem Mount, sobald `common_storage` aktiv ist.
 
 Workspace Defaults:
 
-- For each user in `devmachine_target_users`, a workspace is created under `{{ devmachine_workspace_root }}/{{ username }}`.
-- A symlink `~/{{ devmachine_workspace_link_name }}` is created in every target user's home directory.
-- The shared workspace (if enabled) is set up once, owned by the first user in the list unless `devmachine_shared_workspace_owner` is overridden.
-- Optionally, a general user (default name `devuser`) can be created (`devmachine_general_user_enabled: true`).
-- Note: Override the default user `devuser` via `devmachine_general_user` if needed to avoid naming conflicts.
+- `vm_owner[0]` bekommt einen Workspace unter `{{ devmachine_workspace_root }}/{{ vm_owner[0] }}`
+  + Symlink `~/{{ devmachine_workspace_link_name }}` (Default `~/work`).
 
 ## Ausführung
-
-Lokaler Host (ein User):
 
 ```bash
 ansible-playbook playbooks/devmachine.yml \
   -e target_hosts=localhost \
-  -e '{"devmachine_target_users": ["priad11-ext"]}'
+  -e '{"vm_owner": ["huhu"]}'
 ```
 
-Remote-Hosts aus der Gruppe `devmachines` mit mehreren Usern (empfohlen: `host_vars` oder Gruppenvar):
+Für Remote-Hosts den User-Namen in `host_vars/myserver.yml` setzen:
 
 ```yaml
 # inventory/host_vars/myserver.yml
-devmachine_target_users:
-  - priad11-ext
-  - jdoe
-  - msmith
+vm_owner:
+  - huhu
 ```
 
 ```bash
 ansible-playbook playbooks/devmachine.yml
 ```
 
-Beispiel mit Vault-Bootstrap für den passwortgeschützten SSH-Key des Login-Users `ansible`:
-
-```bash
-export ANSIBLE_VAULT_PASSWORD_FILE=~/.ansible/.vault-pass.txt
-ansible-playbook playbooks/devmachine.yml
-```
-
-Beim ersten Lauf wird der lokale SSH-Key unter `devmachine_ansible_login_ssh_key_path` erzeugt
-(falls er noch nicht existiert) und anschließend verschlüsselt in
-`devmachine_ansible_login_ssh_key_vault_file` abgelegt (inklusive Passphrase und Private Key).
-Der Standardpfad für `devmachine_ansible_login_ssh_key_vault_file` erwartet die Repo-Struktur
-`playbooks/` und `inventory/` als Geschwisterverzeichnisse.

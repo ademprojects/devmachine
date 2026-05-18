@@ -7,4 +7,5 @@ app_nvm_profile_path: /etc/profile.d/app-nvm.sh
 app_nvm_node_version: "v24.15.0"
 app_nvm_set_default: true
 app_nvm_proxy_url: "{{ devmachine_proxy_url }}"
+app_nvm_npm_registry_url: "{{ devmachine_npm_registry_url }}"
 vm_owner: []
