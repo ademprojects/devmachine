@@ -7,6 +7,7 @@ Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 - IntelliJ IDEA (Linux tar.gz aus `roles/ide_intellij/files/`)
 - Google Chrome (RPM aus `roles/chrome/files/`)
 - XFCE-Desktop mit xrdp (RDP-Zugriff für `vm_owner[0]`)
+- Podman (rootless für `vm_owner[0]`)
 - Java-Entwicklungspaketen über ein Nexus-Repository
 - Nexus-Konfiguration für `npm` und `pyenv`/`pip`
 
@@ -123,6 +124,15 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 - `chrome_sha256`
 - `chrome_package_dir`
 
+`podman`-Rolle:
+
+- `podman_packages`
+- `podman_docker_compat`
+- `podman_subuid_start`
+- `podman_subuid_count`
+- `podman_enable_lingering`
+- `podman_verify_rootless`
+
 `xrdp`-Rolle:
 
 - `xrdp_packages`
@@ -162,6 +172,17 @@ Passwordless sudo is **disabled by default**; set `devmachine_sudo_nopasswd: tru
 
 VS Code-Extensions werden nur für `vm_owner[0]` installiert (Rolle `ide_vscode`), nicht für die
 `devmachine_target_users`.
+
+Podman rootless:
+
+- Rolle `podman` installiert podman + slirp4netns/fuse-overlayfs/crun.
+- Trägt `vm_owner[0]` in `/etc/subuid` und `/etc/subgid` ein (Default-Range
+  `100000-165535`, konfigurierbar über `podman_subuid_start`/`podman_subuid_count`).
+- `loginctl enable-linger {{ vm_owner[0] }}` damit User-Systemd-Services (z. B. `podman generate
+  systemd`-Units) ohne aktiven Login laufen.
+- Verifiziert anschließend `podman info` als `vm_owner[0]` (abschaltbar mit
+  `podman_verify_rootless: false`).
+- Optionaler Docker-CLI-Shim via `podman_docker_compat: true` (installiert `podman-docker`).
 
 xrdp / XFCE:
 

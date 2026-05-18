@@ -1,0 +1,77 @@
+---
+- name: Validate vm_owner contains exactly one user
+  ansible.builtin.assert:
+    that:
+      - vm_owner is iterable
+      - vm_owner is not string
+      - vm_owner | length == 1
+      - vm_owner[0] | length > 0
+    fail_msg: "vm_owner must be a list with exactly one user name."
+
+- name: Install podman packages
+  ansible.builtin.dnf:
+    name: "{{ podman_packages }}"
+    state: present
+
+- name: Install podman docker compatibility shim
+  ansible.builtin.dnf:
+    name: podman-docker
+    state: present
+  when: podman_docker_compat | bool
+
+- name: Read passwd entry for podman target user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ vm_owner[0] }}"
+
+- name: Resolve target user home directory
+  ansible.builtin.set_fact:
+    podman_target_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
+
+- name: Ensure subuid entry for vm_owner
+  ansible.builtin.lineinfile:
+    path: /etc/subuid
+    regexp: "^{{ vm_owner[0] }}:"
+    line: "{{ vm_owner[0] }}:{{ podman_subuid_start }}:{{ podman_subuid_count }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure subgid entry for vm_owner
+  ansible.builtin.lineinfile:
+    path: /etc/subgid
+    regexp: "^{{ vm_owner[0] }}:"
+    line: "{{ vm_owner[0] }}:{{ podman_subuid_start }}:{{ podman_subuid_count }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable systemd lingering for vm_owner
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ vm_owner[0] }}"
+    creates: "/var/lib/systemd/linger/{{ vm_owner[0] }}"
+  when: podman_enable_lingering | bool
+
+- name: Verify rootless podman works for vm_owner
+  ansible.builtin.command:
+    cmd: podman info
+  become: true
+  become_user: "{{ vm_owner[0] }}"
+  environment:
+    HOME: "{{ podman_target_user_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts.getent_passwd[vm_owner[0]][1] }}"
+  register: podman_info_check
+  changed_when: false
+  failed_when: false
+  when: podman_verify_rootless | bool
+
+- name: Assert rootless podman is functional for vm_owner
+  ansible.builtin.assert:
+    that:
+      - podman_info_check.rc == 0
+    fail_msg: >-
+      podman info failed for {{ vm_owner[0] }}.
+      stderr={{ podman_info_check.stderr | default('') | trim }}
+  when: podman_verify_rootless | bool

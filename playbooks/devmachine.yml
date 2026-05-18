@@ -11,3 +11,4 @@
     - role: ide_intellij
     - role: chrome
     - role: xrdp
+    - role: podman
