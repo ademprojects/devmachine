@@ -1,0 +1,21 @@
+---
+app_cli_packages:
+  - htop
+  - tmux
+  - jq
+  - ripgrep
+  - fd-find
+  - bind-utils
+  - lsof
+  - tcpdump
+  - rsync
+  - tree
+  - vim-enhanced
+  - mosh
+  - bash-completion
+  - wget
+  - which
+  - file
+app_cli_mosh_open_firewall: true
+app_cli_mosh_firewall_port_min: 60000
+app_cli_mosh_firewall_port_max: 61000

@@ -1,0 +1,4 @@
+---
+- name: Validate and reload sshd
+  ansible.builtin.shell:
+    cmd: /usr/sbin/sshd -t && systemctl reload {{ common_sshd_service_name }}

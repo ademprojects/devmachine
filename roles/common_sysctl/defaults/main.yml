@@ -1,0 +1,6 @@
+---
+common_sysctl_dropin_path: /etc/sysctl.d/90-devmachine.conf
+common_sysctl_inotify_max_user_watches: 1048576
+common_sysctl_inotify_max_user_instances: 8192
+common_sysctl_vm_max_map_count: 262144
+common_sysctl_fs_file_max: 2097152

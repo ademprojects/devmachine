@@ -89,3 +89,50 @@
     dest: "{{ ide_intellij_symlink }}"
     state: link
     force: true
+
+- name: Discover IntelliJ plugin files in role files
+  ansible.builtin.set_fact:
+    ide_intellij_plugin_files: >-
+      {{
+        query('fileglob', role_path ~ '/files/' ~ ide_intellij_plugins_subdir ~ '/*')
+        | map('basename')
+        | reject('match', '^\\.')
+        | sort
+      }}
+  run_once: true
+
+- name: Report discovered IntelliJ plugins
+  ansible.builtin.debug:
+    msg: >-
+      Found {{ ide_intellij_plugin_files | length }} IntelliJ plugin file(s) under
+      roles/ide_intellij/files/{{ ide_intellij_plugins_subdir }}/.
+  run_once: true
+
+- name: Ensure IntelliJ plugins directory exists
+  ansible.builtin.file:
+    path: "{{ ide_intellij_home }}/plugins"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Extract IntelliJ ZIP plugins into install directory
+  ansible.builtin.unarchive:
+    src: "{{ ide_intellij_plugins_subdir }}/{{ item }}"
+    dest: "{{ ide_intellij_home }}/plugins"
+    owner: root
+    group: root
+  loop: "{{ ide_intellij_plugin_files | select('match', '.*\\.zip$') | list }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Install IntelliJ JAR plugins into install directory
+  ansible.builtin.copy:
+    src: "{{ ide_intellij_plugins_subdir }}/{{ item }}"
+    dest: "{{ ide_intellij_home }}/plugins/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ ide_intellij_plugin_files | select('match', '.*\\.jar$') | list }}"
+  loop_control:
+    label: "{{ item }}"

@@ -1,0 +1,6 @@
+---
+app_java_packages:
+  - java-21-openjdk-devel
+  - java-17-openjdk-devel
+app_java_default_version: "21"
+app_java_profile_path: /etc/profile.d/app-java.sh

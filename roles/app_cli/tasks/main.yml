@@ -1,0 +1,38 @@
+---
+- name: Install common CLI tooling
+  ansible.builtin.dnf:
+    name: "{{ app_cli_packages }}"
+    state: present
+
+- name: Check whether firewalld is active
+  ansible.builtin.command:
+    cmd: systemctl is-active firewalld
+  register: app_cli_firewalld_state
+  changed_when: false
+  failed_when: false
+
+- name: Query firewalld for mosh UDP port range
+  ansible.builtin.command:
+    cmd: "firewall-cmd --permanent --query-port={{ app_cli_mosh_firewall_port_min }}-{{ app_cli_mosh_firewall_port_max }}/udp"
+  register: app_cli_mosh_port_check
+  changed_when: false
+  failed_when: false
+  when:
+    - app_cli_mosh_open_firewall | bool
+    - app_cli_firewalld_state.stdout | trim == 'active'
+
+- name: Add mosh UDP port range to firewalld
+  ansible.builtin.command:
+    cmd: "firewall-cmd --permanent --add-port={{ app_cli_mosh_firewall_port_min }}-{{ app_cli_mosh_firewall_port_max }}/udp"
+  when:
+    - app_cli_mosh_open_firewall | bool
+    - app_cli_firewalld_state.stdout | trim == 'active'
+    - app_cli_mosh_port_check.rc != 0
+
+- name: Reload firewalld after mosh port change
+  ansible.builtin.command:
+    cmd: firewall-cmd --reload
+  when:
+    - app_cli_mosh_open_firewall | bool
+    - app_cli_firewalld_state.stdout | trim == 'active'
+    - app_cli_mosh_port_check.rc != 0

@@ -27,36 +27,15 @@
       VS Code CLI ('code') is not available for user {{ ide_vscode_target_user }}.
       Verify that the VS Code RPM was installed successfully.
 
-- name: List installed VS Code extensions for {{ ide_vscode_target_user }}
+- name: Install VS Code plugins for {{ ide_vscode_target_user }}
   ansible.builtin.command:
-    cmd: code --list-extensions
+    cmd: "code --install-extension {{ ide_vscode_package_dir }}/{{ ide_vscode_plugins_subdir }}/{{ item }}"
   become: true
   become_user: "{{ ide_vscode_target_user }}"
   environment:
     HOME: "{{ ide_vscode_target_user_home }}"
-  register: ide_vscode_installed_extensions
-  changed_when: false
-  failed_when: false
-
-- name: Fail when installed VS Code extensions cannot be read for {{ ide_vscode_target_user }}
-  ansible.builtin.assert:
-    that:
-      - ide_vscode_installed_extensions.rc == 0
-    fail_msg: >-
-      Failed to list VS Code extensions for {{ ide_vscode_target_user }}.
-      stdout={{ ide_vscode_installed_extensions.stdout | default('') | trim }}
-      stderr={{ ide_vscode_installed_extensions.stderr | default('') | trim }}
-
-- name: Normalize installed VS Code extension IDs
-  ansible.builtin.set_fact:
-    ide_vscode_installed_extensions_lc: "{{ ide_vscode_installed_extensions.stdout_lines | map('lower') | list }}"
-
-- name: Install missing VS Code extensions for {{ ide_vscode_target_user }}
-  ansible.builtin.command:
-    cmd: "code --install-extension {{ ide_vscode_package_dir }}/{{ item.filename }}"
-  become: true
-  become_user: "{{ ide_vscode_target_user }}"
-  environment:
-    HOME: "{{ ide_vscode_target_user_home }}"
-  loop: "{{ ide_vscode_extensions }}"
-  when: (item.id | lower) not in ide_vscode_installed_extensions_lc
+  loop: "{{ ide_vscode_plugin_files }}"
+  loop_control:
+    label: "{{ item }}"
+  register: ide_vscode_install_result
+  changed_when: "'is already installed' not in (ide_vscode_install_result.stdout | default(''))"

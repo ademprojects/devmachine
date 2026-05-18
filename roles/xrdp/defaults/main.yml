@@ -21,6 +21,24 @@ xrdp_xrdp_ini_entries:
   - section: Globals
     option: security_layer
     value: negotiate
+  - section: Globals
+    option: tcp_nodelay
+    value: "true"
+  - section: Globals
+    option: tcp_keepalive
+    value: "true"
+  - section: Globals
+    option: bitmap_compression
+    value: "true"
+  - section: Globals
+    option: bulk_compression
+    value: "true"
+  - section: Globals
+    option: new_cursors
+    value: "true"
+  - section: Globals
+    option: max_bpp
+    value: "24"
 
 xrdp_sesman_ini_entries:
   - section: Security

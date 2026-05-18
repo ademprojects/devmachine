@@ -1,0 +1,9 @@
+---
+app_pyenv_version: "2.6.31"
+app_pyenv_archive_url: "{{ devmachine_nexus_base_url }}/raw/pyenv/pyenv-{{ app_pyenv_version }}.tar.gz"
+app_pyenv_install_subdir: .pyenv
+app_pyenv_python_build_mirror_url: "{{ devmachine_nexus_base_url }}/pyenv-mirror/"
+app_pyenv_profile_path: /etc/profile.d/app-pyenv.sh
+app_pyenv_python_version: "3.14.5"
+app_pyenv_proxy_url: "{{ devmachine_proxy_url }}"
+vm_owner: []

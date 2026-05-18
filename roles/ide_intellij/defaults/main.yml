@@ -4,3 +4,4 @@ ide_intellij_sha256: ""
 ide_intellij_package_dir: /opt/devmachine/packages
 ide_intellij_install_dir: /opt/jetbrains
 ide_intellij_symlink: /usr/local/bin/idea
+ide_intellij_plugins_subdir: plugins

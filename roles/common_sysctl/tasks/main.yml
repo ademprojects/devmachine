@@ -1,0 +1,14 @@
+---
+- name: Write devmachine sysctl drop-in
+  ansible.builtin.copy:
+    dest: "{{ common_sysctl_dropin_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible role common_sysctl. Do not edit by hand.
+      fs.inotify.max_user_watches = {{ common_sysctl_inotify_max_user_watches }}
+      fs.inotify.max_user_instances = {{ common_sysctl_inotify_max_user_instances }}
+      vm.max_map_count = {{ common_sysctl_vm_max_map_count }}
+      fs.file-max = {{ common_sysctl_fs_file_max }}
+  notify: Apply sysctl

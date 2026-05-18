@@ -1,0 +1,284 @@
+---
+- name: Validate vm_owner contains exactly one user
+  ansible.builtin.assert:
+    that:
+      - vm_owner is iterable
+      - vm_owner is not string
+      - vm_owner | length == 1
+      - vm_owner[0] | length > 0
+    fail_msg: "vm_owner must be a list with exactly one user name."
+
+- name: Install podman packages
+  ansible.builtin.dnf:
+    name: "{{ app_podman_packages }}"
+    state: present
+
+- name: Install podman docker compatibility shim
+  ansible.builtin.dnf:
+    name: podman-docker
+    state: present
+  when: app_podman_docker_compat | bool
+
+- name: Read passwd entry for podman target user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ vm_owner[0] }}"
+
+- name: Read group entries
+  ansible.builtin.getent:
+    database: group
+
+- name: Resolve target user home directory
+  ansible.builtin.set_fact:
+    app_podman_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
+
+- name: Resolve target user primary group
+  ansible.builtin.set_fact:
+    app_podman_user_group: >-
+      {{
+        ansible_facts.getent_group
+        | dict2items
+        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
+        | map(attribute='key')
+        | first
+      }}
+
+- name: Ensure target user primary group was resolved
+  ansible.builtin.assert:
+    that:
+      - app_podman_user_group | length > 0
+    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
+
+- name: Ensure subuid entry for vm_owner
+  ansible.builtin.lineinfile:
+    path: /etc/subuid
+    regexp: "^{{ vm_owner[0] }}:"
+    line: "{{ vm_owner[0] }}:{{ app_podman_subuid_start }}:{{ app_podman_subuid_count }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure subgid entry for vm_owner
+  ansible.builtin.lineinfile:
+    path: /etc/subgid
+    regexp: "^{{ vm_owner[0] }}:"
+    line: "{{ vm_owner[0] }}:{{ app_podman_subuid_start }}:{{ app_podman_subuid_count }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable systemd lingering for vm_owner
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ vm_owner[0] }}"
+    creates: "/var/lib/systemd/linger/{{ vm_owner[0] }}"
+  when: app_podman_enable_lingering | bool
+
+# ---- Container storage relocated to /mnt/data ----
+
+- name: Ensure podman storage base directory exists
+  ansible.builtin.file:
+    path: "{{ app_podman_storage_base }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure podman storage directory for root exists
+  ansible.builtin.file:
+    path: "{{ app_podman_storage_base }}/root/storage"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Ensure podman storage directory for vm_owner exists
+  ansible.builtin.file:
+    path: "{{ app_podman_storage_base }}/{{ vm_owner[0] }}/storage"
+    state: directory
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_podman_user_group }}"
+    mode: "0700"
+
+- name: List current SELinux file contexts
+  ansible.builtin.command:
+    cmd: semanage fcontext -l
+  register: app_podman_fcontext_list
+  changed_when: false
+  failed_when: false
+
+- name: Add SELinux fcontext for podman storage base
+  ansible.builtin.command:
+    cmd: "semanage fcontext -a -t container_var_lib_t '{{ app_podman_storage_base }}(/.*)?'"
+  when:
+    - app_podman_fcontext_list.rc == 0
+    - app_podman_storage_base ~ '(/.*)?' not in app_podman_fcontext_list.stdout
+  register: app_podman_fcontext_added
+  changed_when: app_podman_fcontext_added.rc == 0
+  failed_when:
+    - app_podman_fcontext_added.rc != 0
+    - "'already defined' not in (app_podman_fcontext_added.stderr | default(''))"
+
+- name: Restore SELinux contexts on podman storage base
+  ansible.builtin.command:
+    cmd: "restorecon -RvF {{ app_podman_storage_base }}"
+  register: app_podman_restorecon
+  changed_when: app_podman_restorecon.stdout | length > 0
+  failed_when: false
+
+# ---- storage.conf (root + vm_owner) ----
+
+- name: Ensure /etc/containers exists
+  ansible.builtin.file:
+    path: /etc/containers
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write system /etc/containers/storage.conf (root storage)
+  ansible.builtin.copy:
+    dest: /etc/containers/storage.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [storage]
+      driver = "{{ app_podman_storage_driver }}"
+      runroot = "/run/containers/storage"
+      graphroot = "{{ app_podman_storage_base }}/root/storage"
+
+      [storage.options]
+      mount_program = "{{ app_podman_storage_mount_program }}"
+
+- name: Ensure ~vm_owner/.config/containers exists
+  ansible.builtin.file:
+    path: "{{ app_podman_user_home }}/.config/containers"
+    state: directory
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_podman_user_group }}"
+    mode: "0755"
+
+- name: Write rootless storage.conf for vm_owner
+  ansible.builtin.copy:
+    dest: "{{ app_podman_user_home }}/.config/containers/storage.conf"
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_podman_user_group }}"
+    mode: "0644"
+    content: |
+      [storage]
+      driver = "{{ app_podman_storage_driver }}"
+      graphroot = "{{ app_podman_storage_base }}/{{ vm_owner[0] }}/storage"
+
+      [storage.options]
+      mount_program = "{{ app_podman_storage_mount_program }}"
+
+# ---- registries.conf (Harbor + unqualified search) ----
+
+- name: Build effective unqualified search registries list
+  ansible.builtin.set_fact:
+    app_podman_effective_unqualified_search: >-
+      {{
+        ([app_podman_harbor_host] if (app_podman_harbor_host | length > 0) else [])
+        + app_podman_unqualified_search_registries
+      }}
+
+- name: Write /etc/containers/registries.conf
+  ansible.builtin.copy:
+    dest: /etc/containers/registries.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      unqualified-search-registries = {{ app_podman_effective_unqualified_search | to_json }}
+
+      short-name-mode = "permissive"
+      {% if app_podman_harbor_host | length > 0 %}
+
+      [[registry]]
+      prefix = "{{ app_podman_harbor_host }}"
+      location = "{{ app_podman_harbor_host }}"
+      {% endif %}
+
+# ---- auth.json from vault (root + vm_owner) ----
+
+- name: Stat podman auth vault file on controller
+  ansible.builtin.stat:
+    path: "{{ app_podman_auth_json_vault_file }}"
+  register: app_podman_auth_vault_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Load podman auth.json from vault file
+  ansible.builtin.include_vars:
+    file: "{{ app_podman_auth_json_vault_file }}"
+  when: app_podman_auth_vault_stat.stat.exists
+  no_log: true
+
+- name: Report missing auth vault file
+  ansible.builtin.debug:
+    msg: >-
+      {{ app_podman_auth_json_vault_file }} not found — skipping podman auth.json deployment.
+      Create the vault file with `app_podman_auth_json` to enable registry login.
+  when: not app_podman_auth_vault_stat.stat.exists
+
+- name: Ensure /root/.config/containers exists
+  ansible.builtin.file:
+    path: /root/.config/containers
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when:
+    - app_podman_auth_vault_stat.stat.exists
+    - app_podman_auth_json is defined
+
+- name: Deploy podman auth.json for root
+  ansible.builtin.copy:
+    content: "{{ app_podman_auth_json | to_nice_json }}\n"
+    dest: /root/.config/containers/auth.json
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - app_podman_auth_vault_stat.stat.exists
+    - app_podman_auth_json is defined
+  no_log: true
+
+- name: Deploy podman auth.json for vm_owner
+  ansible.builtin.copy:
+    content: "{{ app_podman_auth_json | to_nice_json }}\n"
+    dest: "{{ app_podman_user_home }}/.config/containers/auth.json"
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_podman_user_group }}"
+    mode: "0600"
+  when:
+    - app_podman_auth_vault_stat.stat.exists
+    - app_podman_auth_json is defined
+  no_log: true
+
+# ---- Verification ----
+
+- name: Verify rootless podman works for vm_owner
+  ansible.builtin.command:
+    cmd: podman info
+  become: true
+  become_user: "{{ vm_owner[0] }}"
+  environment:
+    HOME: "{{ app_podman_user_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts.getent_passwd[vm_owner[0]][1] }}"
+  register: app_podman_info_check
+  changed_when: false
+  failed_when: false
+  when: app_podman_verify_rootless | bool
+
+- name: Assert rootless podman is functional for vm_owner
+  ansible.builtin.assert:
+    that:
+      - app_podman_info_check.rc == 0
+    fail_msg: >-
+      podman info failed for {{ vm_owner[0] }}.
+      stderr={{ app_podman_info_check.stderr | default('') | trim }}
+  when: app_podman_verify_rootless | bool

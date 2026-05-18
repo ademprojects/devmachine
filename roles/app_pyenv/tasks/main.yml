@@ -1,0 +1,135 @@
+---
+- name: Validate vm_owner contains exactly one user
+  ansible.builtin.assert:
+    that:
+      - vm_owner is iterable
+      - vm_owner is not string
+      - vm_owner | length == 1
+      - vm_owner[0] | length > 0
+    fail_msg: "vm_owner must be a list with exactly one user name."
+
+- name: Read passwd entry for vm_owner
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ vm_owner[0] }}"
+
+- name: Read group entries
+  ansible.builtin.getent:
+    database: group
+
+- name: Resolve target user home directory
+  ansible.builtin.set_fact:
+    app_pyenv_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
+
+- name: Resolve target user primary group
+  ansible.builtin.set_fact:
+    app_pyenv_user_group: >-
+      {{
+        ansible_facts.getent_group
+        | dict2items
+        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
+        | map(attribute='key')
+        | first
+      }}
+
+- name: Ensure target user primary group was resolved
+  ansible.builtin.assert:
+    that:
+      - app_pyenv_user_group | length > 0
+    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
+
+- name: Ensure pyenv install directory exists
+  ansible.builtin.file:
+    path: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    state: directory
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_pyenv_user_group }}"
+    mode: "0755"
+
+- name: Install pyenv from Nexus tarball
+  ansible.builtin.unarchive:
+    src: "{{ app_pyenv_archive_url }}"
+    dest: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ app_pyenv_user_group }}"
+    creates: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}/bin/pyenv"
+
+- name: Write pyenv shell init to /etc/profile.d
+  ansible.builtin.copy:
+    dest: "{{ app_pyenv_profile_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      if [ -x "$HOME/{{ app_pyenv_install_subdir }}/bin/pyenv" ]; then
+        export PYENV_ROOT="$HOME/{{ app_pyenv_install_subdir }}"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        export PYTHON_BUILD_MIRROR_URL="{{ app_pyenv_python_build_mirror_url }}"
+        eval "$($PYENV_ROOT/bin/pyenv init -)"
+      fi
+
+- name: Resolve latest stable Python 3 version via pyenv
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}/bin/pyenv" install --list \
+        | sed 's/^[[:space:]]*//' \
+        | grep -E '^3\.[0-9]+\.[0-9]+$' \
+        | tail -1
+  become: true
+  become_user: "{{ vm_owner[0] }}"
+  environment:
+    HOME: "{{ app_pyenv_user_home }}"
+    PYENV_ROOT: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    HTTP_PROXY: "{{ app_pyenv_proxy_url }}"
+    HTTPS_PROXY: "{{ app_pyenv_proxy_url }}"
+    http_proxy: "{{ app_pyenv_proxy_url }}"
+    https_proxy: "{{ app_pyenv_proxy_url }}"
+  register: app_pyenv_latest_python
+  changed_when: false
+  when: app_pyenv_python_version | length == 0
+
+- name: Determine target Python version
+  ansible.builtin.set_fact:
+    app_pyenv_target_python: >-
+      {{
+        app_pyenv_python_version
+        if (app_pyenv_python_version | length > 0)
+        else (app_pyenv_latest_python.stdout | trim)
+      }}
+
+- name: Assert target Python version was resolved
+  ansible.builtin.assert:
+    that:
+      - app_pyenv_target_python | length > 0
+      - app_pyenv_target_python is match('^\d+\.\d+\.\d+$')
+    fail_msg: "Could not resolve a Python version to install (got '{{ app_pyenv_target_python }}')."
+
+- name: Install target Python via pyenv (build from source through Nexus mirror)
+  ansible.builtin.command:
+    cmd: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}/bin/pyenv install --skip-existing {{ app_pyenv_target_python }}"
+  become: true
+  become_user: "{{ vm_owner[0] }}"
+  environment:
+    HOME: "{{ app_pyenv_user_home }}"
+    PYENV_ROOT: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    PYTHON_BUILD_MIRROR_URL: "{{ app_pyenv_python_build_mirror_url }}"
+    HTTP_PROXY: "{{ app_pyenv_proxy_url }}"
+    HTTPS_PROXY: "{{ app_pyenv_proxy_url }}"
+    http_proxy: "{{ app_pyenv_proxy_url }}"
+    https_proxy: "{{ app_pyenv_proxy_url }}"
+  register: app_pyenv_install_result
+  changed_when: "'Installed Python-' in app_pyenv_install_result.stdout"
+
+- name: Set installed Python as global default for vm_owner
+  ansible.builtin.command:
+    cmd: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}/bin/pyenv global {{ app_pyenv_target_python }}"
+  become: true
+  become_user: "{{ vm_owner[0] }}"
+  environment:
+    HOME: "{{ app_pyenv_user_home }}"
+    PYENV_ROOT: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+  changed_when: false

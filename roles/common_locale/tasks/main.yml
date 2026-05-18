@@ -1,0 +1,34 @@
+---
+- name: Read current timezone
+  ansible.builtin.command:
+    cmd: timedatectl show --property=Timezone --value
+  register: common_locale_current_tz
+  changed_when: false
+
+- name: Set system timezone
+  ansible.builtin.command:
+    cmd: "timedatectl set-timezone {{ common_locale_timezone }}"
+  when: common_locale_current_tz.stdout | trim != common_locale_timezone
+
+- name: Ensure glibc-langpack for configured locale is installed
+  ansible.builtin.dnf:
+    name: "glibc-langpack-{{ common_locale_lang | split('_') | first }}"
+    state: present
+
+- name: Read current locale
+  ansible.builtin.command:
+    cmd: localectl status
+  register: common_locale_current
+  changed_when: false
+
+- name: Set system locale
+  ansible.builtin.command:
+    cmd: "localectl set-locale LANG={{ common_locale_lang }}"
+  when: "'LANG=' ~ common_locale_lang not in common_locale_current.stdout"
+
+- name: Set virtual console keymap
+  ansible.builtin.command:
+    cmd: "localectl set-keymap {{ common_locale_keymap }}"
+  when:
+    - common_locale_keymap | length > 0
+    - "'VC Keymap: ' ~ common_locale_keymap not in common_locale_current.stdout"

@@ -1,0 +1,19 @@
+---
+app_git_target_root: /mnt/data
+app_git_user_key_filename: id_ed25519
+app_git_user_name: ""
+app_git_user_email: ""
+app_git_global_config:
+  init.defaultBranch: main
+  pull.rebase: "false"
+  fetch.prune: "true"
+  core.editor: vim
+  credential.helper: "cache --timeout=14400"
+app_git_repos: []
+app_git_hosts:
+  - name: github.com
+    fingerprints:
+      - "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"
+      - "SHA256:p2QAMXNIC1TJYWeIOttrVc98/R1BUFWu3/LiyKgUfQM"
+      - "SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s"
+vm_owner: []

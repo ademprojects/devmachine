@@ -1,0 +1,47 @@
+---
+- name: Install OpenJDK development packages
+  ansible.builtin.dnf:
+    name: "{{ app_java_packages }}"
+    state: present
+
+- name: Resolve JAVA_HOME for the default Java version
+  ansible.builtin.command:
+    cmd: "rpm -q --qf '%{INSTPREFIXES}\n' java-{{ app_java_default_version }}-openjdk-devel"
+  register: app_java_home_query
+  changed_when: false
+  failed_when: false
+
+- name: Find default Java home via /usr/lib/jvm symlink
+  ansible.builtin.stat:
+    path: "/usr/lib/jvm/java-{{ app_java_default_version }}-openjdk"
+  register: app_java_default_jvm_stat
+
+- name: Assert default Java home exists
+  ansible.builtin.assert:
+    that:
+      - app_java_default_jvm_stat.stat.exists
+    fail_msg: >-
+      Expected /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk after installing
+      java-{{ app_java_default_version }}-openjdk-devel.
+
+- name: Set system default java to selected version
+  ansible.builtin.command:
+    cmd: "alternatives --set java /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk/bin/java"
+  changed_when: false
+
+- name: Set system default javac to selected version
+  ansible.builtin.command:
+    cmd: "alternatives --set javac /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk/bin/javac"
+  changed_when: false
+
+- name: Write Java shell init to /etc/profile.d
+  ansible.builtin.copy:
+    dest: "{{ app_java_profile_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      if [ -d /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk ]; then
+        export JAVA_HOME=/usr/lib/jvm/java-{{ app_java_default_version }}-openjdk
+        export PATH="$JAVA_HOME/bin:$PATH"
+      fi

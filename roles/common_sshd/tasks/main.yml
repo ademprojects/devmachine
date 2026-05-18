@@ -1,0 +1,20 @@
+---
+- name: Write devmachine sshd_config drop-in
+  ansible.builtin.copy:
+    dest: "{{ common_sshd_dropin_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      # Managed by Ansible role common_sshd. Do not edit by hand.
+      ClientAliveInterval {{ common_sshd_client_alive_interval }}
+      ClientAliveCountMax {{ common_sshd_client_alive_count_max }}
+      TCPKeepAlive {{ common_sshd_tcp_keepalive }}
+      MaxStartups {{ common_sshd_max_startups }}
+      MaxSessions {{ common_sshd_max_sessions }}
+      AllowAgentForwarding {{ common_sshd_allow_agent_forwarding }}
+      AllowTcpForwarding {{ common_sshd_allow_tcp_forwarding }}
+      X11Forwarding {{ common_sshd_x11_forwarding }}
+      Compression {{ common_sshd_compression }}
+      UseDNS {{ common_sshd_use_dns }}
+  notify: Validate and reload sshd

@@ -1,0 +1,11 @@
+---
+app_maven_version: "3.9.16"
+app_maven_archive_url: "{{ devmachine_nexus_base_url }}/raw/maven/apache-maven-{{ app_maven_version }}-bin.tar.gz"
+app_maven_install_base: /opt
+app_maven_symlink: /usr/local/bin/mvn
+app_maven_profile_path: /etc/profile.d/app-maven.sh
+app_maven_nexus_repository: "{{ devmachine_nexus_base_url }}/maven-public/"
+app_maven_proxy_host: "{{ devmachine_proxy_fqdn }}"
+app_maven_proxy_port: "{{ devmachine_proxy_port }}"
+app_maven_non_proxy_hosts: "localhost|127.0.0.1"
+vm_owner: []

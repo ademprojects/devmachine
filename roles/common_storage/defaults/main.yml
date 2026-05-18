@@ -7,5 +7,5 @@ storage_lv_size: 100%FREE
 storage_fs_type: xfs
 storage_mount_point: /mnt/data
 storage_mount_mode: "0755"
-storage_mount_options: defaults
+storage_mount_options: "defaults,noatime,nodiratime"
 vm_owner: []
