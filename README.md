@@ -13,6 +13,11 @@ Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 - Steuerrechner mit Ansible
 - Zielsystem(e): RHEL 9.6
 - VS Code RPM und IntelliJ tar.gz wurden vorab auf den Steuerrechner kopiert (Standard: `./packages`)
+- Ansible-Collections aus `requirements.yml` installiert:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+```
 
 ## Linux-Pakete per PowerShell herunterladen
 
@@ -94,6 +99,14 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_vscode_sha256`
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
+- `devmachine_storage_setup_enabled`
+- `devmachine_storage_device`
+- `devmachine_storage_vg_name`
+- `devmachine_storage_lv_name`
+- `devmachine_storage_lv_size`
+- `devmachine_storage_fs_type`
+- `devmachine_storage_mount_point`
+- `devmachine_storage_mount_options`
 
 Empfohlen: nur `devmachine_nexus_fqdn` und `devmachine_proxy_fqdn` pro Server setzen; die übrigen
 Nexus-/Proxy-URLs werden standardmäßig daraus abgeleitet.
@@ -102,6 +115,16 @@ Important: `devmachine_target_users` must be set to a non-empty list of real dev
 Each listed user receives their own workspace, VS Code extensions, tool configuration, and — when
 `devmachine_sudo_nopasswd: true` — a passwordless sudo entry in `/etc/sudoers.d/`.
 Passwordless sudo is **disabled by default**; set `devmachine_sudo_nopasswd: true` to enable it explicitly.
+
+Storage / Workspace-Mount:
+
+- Optionale Rolle `storage` legt einen LVM-Stack (PV → VG → LV → XFS) auf einer leeren Disk an
+  und mountet sie unter `devmachine_storage_mount_point` (Default `/mnt/devdata`).
+- Aktivierung via `devmachine_storage_setup_enabled: true`. Default-Device ist `/dev/sdb`.
+- Die Rolle bricht ab, wenn das Device bereits gemountet ist oder die Root-Partition trägt
+  (Schutz vor versehentlichem Daten-Wipe). Bestehende LVM-Strukturen werden idempotent erkannt.
+- Workspace-Pfade der `ide`-Rolle (`devmachine_workspace_root`, `devmachine_shared_workspace_path`)
+  liegen standardmäßig unter `/mnt/devdata` und nutzen damit den Mount, sobald `storage` aktiv ist.
 
 Workspace Defaults:
 

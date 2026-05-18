@@ -1,0 +1,83 @@
+---
+- name: Validate storage device path
+  ansible.builtin.assert:
+    that:
+      - devmachine_storage_device | length > 0
+      - devmachine_storage_device is match('^/dev/[A-Za-z0-9_/-]+$')
+    fail_msg: "devmachine_storage_device must be an absolute /dev path."
+
+- name: Check that storage device exists on host
+  ansible.builtin.stat:
+    path: "{{ devmachine_storage_device }}"
+  register: devmachine_storage_device_stat
+
+- name: Fail when storage device is missing
+  ansible.builtin.fail:
+    msg: "Storage device {{ devmachine_storage_device }} not found on host."
+  when: not devmachine_storage_device_stat.stat.exists
+
+- name: Resolve storage device basename
+  ansible.builtin.set_fact:
+    devmachine_storage_device_basename: "{{ devmachine_storage_device | basename }}"
+
+- name: Read current mounts
+  ansible.builtin.setup:
+    gather_subset:
+      - mounts
+
+- name: Ensure storage device is not already mounted elsewhere
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.mounts
+        | selectattr('device', 'match', '^' ~ devmachine_storage_device ~ '($|[0-9]+$)')
+        | list
+        | length == 0
+    fail_msg: >-
+      Storage device {{ devmachine_storage_device }} (or a partition of it) is already mounted.
+      Refusing to reconfigure to avoid data loss.
+
+- name: Ensure storage device is not the root disk
+  ansible.builtin.assert:
+    that:
+      - (ansible_facts.mounts | selectattr('mount', 'equalto', '/') | map(attribute='device') | first)
+        is not match('^' ~ devmachine_storage_device ~ '($|[0-9]+$)')
+    fail_msg: >-
+      Refusing to use {{ devmachine_storage_device }} for workspace storage:
+      it currently hosts the root filesystem.
+
+- name: Create LVM volume group on storage device
+  community.general.lvg:
+    vg: "{{ devmachine_storage_vg_name }}"
+    pvs: "{{ devmachine_storage_device }}"
+    state: present
+    force: false
+
+- name: Create logical volume for workspace data
+  community.general.lvol:
+    vg: "{{ devmachine_storage_vg_name }}"
+    lv: "{{ devmachine_storage_lv_name }}"
+    size: "{{ devmachine_storage_lv_size }}"
+    state: present
+    shrink: false
+
+- name: Create filesystem on workspace logical volume
+  community.general.filesystem:
+    fstype: "{{ devmachine_storage_fs_type }}"
+    dev: "/dev/{{ devmachine_storage_vg_name }}/{{ devmachine_storage_lv_name }}"
+    force: false
+
+- name: Ensure workspace mount point exists
+  ansible.builtin.file:
+    path: "{{ devmachine_storage_mount_point }}"
+    state: directory
+    owner: "{{ devmachine_storage_mount_owner }}"
+    group: "{{ devmachine_storage_mount_group }}"
+    mode: "{{ devmachine_storage_mount_mode }}"
+
+- name: Mount workspace logical volume
+  ansible.posix.mount:
+    path: "{{ devmachine_storage_mount_point }}"
+    src: "/dev/{{ devmachine_storage_vg_name }}/{{ devmachine_storage_lv_name }}"
+    fstype: "{{ devmachine_storage_fs_type }}"
+    opts: "{{ devmachine_storage_mount_options }}"
+    state: mounted

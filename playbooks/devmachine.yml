@@ -4,4 +4,6 @@
   become: true
   gather_facts: true
   roles:
+    - role: storage
+      when: devmachine_storage_setup_enabled | default(false) | bool
     - role: ide
