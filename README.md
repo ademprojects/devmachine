@@ -95,14 +95,14 @@ Standardwerte stehen in `roles/ide/defaults/main.yml` und können via `-e` über
 - `devmachine_vscode_sha256`
 - `devmachine_vscode_extensions`
 - `devmachine_intellij_sha256`
-- `devmachine_storage_setup_enabled`
-- `devmachine_storage_device`
-- `devmachine_storage_vg_name`
-- `devmachine_storage_lv_name`
-- `devmachine_storage_lv_size`
-- `devmachine_storage_fs_type`
-- `devmachine_storage_mount_point`
-- `devmachine_storage_mount_options`
+- `storage_setup_enabled`
+- `storage_device`
+- `storage_vg_name`
+- `storage_lv_name`
+- `storage_lv_size`
+- `storage_fs_type`
+- `storage_mount_point`
+- `storage_mount_options`
 
 Empfohlen: nur `devmachine_nexus_fqdn` und `devmachine_proxy_fqdn` pro Server setzen; die übrigen
 Nexus-/Proxy-URLs werden standardmäßig daraus abgeleitet.
@@ -115,8 +115,8 @@ Passwordless sudo is **disabled by default**; set `devmachine_sudo_nopasswd: tru
 Storage / Workspace-Mount:
 
 - Optionale Rolle `storage` legt einen LVM-Stack (PV → VG → LV → XFS) auf einer leeren Disk an
-  und mountet sie unter `devmachine_storage_mount_point` (Default `/mnt/devdata`).
-- Aktivierung via `devmachine_storage_setup_enabled: true`. Default-Device ist `/dev/sdb`.
+  und mountet sie unter `storage_mount_point` (Default `/mnt/devdata`).
+- Aktivierung via `storage_setup_enabled: true`. Default-Device ist `/dev/sdb`.
 - Die Rolle bricht ab, wenn das Device bereits gemountet ist, die Root-Partition trägt oder
   eine nicht-LVM-Signatur enthält (Schutz vor versehentlichem Daten-Wipe). Bestehende LVM-Strukturen
   werden idempotent erkannt.

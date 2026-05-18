@@ -1,12 +1,12 @@
 ---
-devmachine_storage_setup_enabled: false
-devmachine_storage_device: /dev/sdb
-devmachine_storage_vg_name: vg_devdata
-devmachine_storage_lv_name: lv_workspaces
-devmachine_storage_lv_size: 100%FREE
-devmachine_storage_fs_type: xfs
-devmachine_storage_mount_point: /mnt/devdata
-devmachine_storage_mount_owner: root
-devmachine_storage_mount_group: root
-devmachine_storage_mount_mode: "0755"
-devmachine_storage_mount_options: defaults
+storage_setup_enabled: false
+storage_device: /dev/sdb
+storage_vg_name: vg_devdata
+storage_lv_name: lv_workspaces
+storage_lv_size: 100%FREE
+storage_fs_type: xfs
+storage_mount_point: /mnt/devdata
+storage_mount_owner: root
+storage_mount_group: root
+storage_mount_mode: "0755"
+storage_mount_options: defaults

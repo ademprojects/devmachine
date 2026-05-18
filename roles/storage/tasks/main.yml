@@ -2,19 +2,19 @@
 - name: Validate storage device path
   ansible.builtin.assert:
     that:
-      - devmachine_storage_device | length > 0
-      - devmachine_storage_device is match('^/dev/[A-Za-z0-9_/-]+$')
-    fail_msg: "devmachine_storage_device must be an absolute /dev path."
+      - storage_device | length > 0
+      - storage_device is match('^/dev/[A-Za-z0-9_/-]+$')
+    fail_msg: "storage_device must be an absolute /dev path."
 
 - name: Check that storage device exists on host
   ansible.builtin.stat:
-    path: "{{ devmachine_storage_device }}"
-  register: devmachine_storage_device_stat
+    path: "{{ storage_device }}"
+  register: storage_device_stat
 
 - name: Fail when storage device is missing
   ansible.builtin.fail:
-    msg: "Storage device {{ devmachine_storage_device }} not found on host."
-  when: not devmachine_storage_device_stat.stat.exists
+    msg: "Storage device {{ storage_device }} not found on host."
+  when: not storage_device_stat.stat.exists
 
 - name: Gather current mounts
   ansible.builtin.setup:
@@ -25,20 +25,20 @@
   ansible.builtin.assert:
     that:
       - ansible_facts.mounts
-        | selectattr('device', 'match', '^' ~ devmachine_storage_device ~ '($|[0-9]+$)')
+        | selectattr('device', 'match', '^' ~ storage_device ~ '($|[0-9]+$)')
         | list
         | length == 0
     fail_msg: >-
-      Storage device {{ devmachine_storage_device }} (or a partition of it) is already mounted.
+      Storage device {{ storage_device }} (or a partition of it) is already mounted.
       Refusing to reconfigure to avoid data loss.
 
 - name: Ensure storage device is not the root disk
   ansible.builtin.assert:
     that:
       - (ansible_facts.mounts | selectattr('mount', 'equalto', '/') | map(attribute='device') | first)
-        is not match('^' ~ devmachine_storage_device ~ '($|[0-9]+$)')
+        is not match('^' ~ storage_device ~ '($|[0-9]+$)')
     fail_msg: >-
-      Refusing to use {{ devmachine_storage_device }} for workspace storage:
+      Refusing to use {{ storage_device }} for workspace storage:
       it currently hosts the root filesystem.
 
 - name: Ensure LVM userspace tools are installed
@@ -48,94 +48,94 @@
 
 - name: Detect existing signature on storage device
   ansible.builtin.command:
-    cmd: "blkid -p -o value -s TYPE {{ devmachine_storage_device }}"
-  register: devmachine_storage_device_signature
+    cmd: "blkid -p -o value -s TYPE {{ storage_device }}"
+  register: storage_device_signature
   changed_when: false
   failed_when: false
 
 - name: Refuse to wipe non-LVM signature on storage device
   ansible.builtin.fail:
     msg: >-
-      Storage device {{ devmachine_storage_device }} contains an existing signature
-      '{{ devmachine_storage_device_signature.stdout | trim }}'.
+      Storage device {{ storage_device }} contains an existing signature
+      '{{ storage_device_signature.stdout | trim }}'.
       Refusing to overwrite automatically. Wipe it manually if intentional.
   when:
-    - devmachine_storage_device_signature.rc == 0
-    - (devmachine_storage_device_signature.stdout | trim) | length > 0
-    - (devmachine_storage_device_signature.stdout | trim) != 'LVM2_member'
+    - storage_device_signature.rc == 0
+    - (storage_device_signature.stdout | trim) | length > 0
+    - (storage_device_signature.stdout | trim) != 'LVM2_member'
 
 - name: Check whether physical volume already exists
   ansible.builtin.command:
-    cmd: "pvs --noheadings -o pv_name {{ devmachine_storage_device }}"
-  register: devmachine_storage_pv_check
+    cmd: "pvs --noheadings -o pv_name {{ storage_device }}"
+  register: storage_pv_check
   changed_when: false
   failed_when: false
 
 - name: Create LVM physical volume
   ansible.builtin.command:
-    cmd: "pvcreate -y {{ devmachine_storage_device }}"
-  when: devmachine_storage_pv_check.rc != 0
+    cmd: "pvcreate -y {{ storage_device }}"
+  when: storage_pv_check.rc != 0
 
 - name: Check whether volume group already exists
   ansible.builtin.command:
-    cmd: "vgs --noheadings -o vg_name {{ devmachine_storage_vg_name }}"
-  register: devmachine_storage_vg_check
+    cmd: "vgs --noheadings -o vg_name {{ storage_vg_name }}"
+  register: storage_vg_check
   changed_when: false
   failed_when: false
 
 - name: Create LVM volume group
   ansible.builtin.command:
-    cmd: "vgcreate {{ devmachine_storage_vg_name }} {{ devmachine_storage_device }}"
-  when: devmachine_storage_vg_check.rc != 0
+    cmd: "vgcreate {{ storage_vg_name }} {{ storage_device }}"
+  when: storage_vg_check.rc != 0
 
 - name: Check whether logical volume already exists
   ansible.builtin.command:
-    cmd: "lvs --noheadings -o lv_name {{ devmachine_storage_vg_name }}/{{ devmachine_storage_lv_name }}"
-  register: devmachine_storage_lv_check
+    cmd: "lvs --noheadings -o lv_name {{ storage_vg_name }}/{{ storage_lv_name }}"
+  register: storage_lv_check
   changed_when: false
   failed_when: false
 
 - name: Create logical volume
   ansible.builtin.command:
-    cmd: "lvcreate -y -l {{ devmachine_storage_lv_size }} -n {{ devmachine_storage_lv_name }} {{ devmachine_storage_vg_name }}"
-  when: devmachine_storage_lv_check.rc != 0
+    cmd: "lvcreate -y -l {{ storage_lv_size }} -n {{ storage_lv_name }} {{ storage_vg_name }}"
+  when: storage_lv_check.rc != 0
 
 - name: Detect filesystem on logical volume
   ansible.builtin.command:
-    cmd: "blkid -p -o value -s TYPE /dev/{{ devmachine_storage_vg_name }}/{{ devmachine_storage_lv_name }}"
-  register: devmachine_storage_lv_fs_check
+    cmd: "blkid -p -o value -s TYPE /dev/{{ storage_vg_name }}/{{ storage_lv_name }}"
+  register: storage_lv_fs_check
   changed_when: false
   failed_when: false
 
 - name: Create filesystem on logical volume
   ansible.builtin.command:
-    cmd: "mkfs.{{ devmachine_storage_fs_type }} /dev/{{ devmachine_storage_vg_name }}/{{ devmachine_storage_lv_name }}"
-  when: (devmachine_storage_lv_fs_check.stdout | trim) | length == 0
+    cmd: "mkfs.{{ storage_fs_type }} /dev/{{ storage_vg_name }}/{{ storage_lv_name }}"
+  when: (storage_lv_fs_check.stdout | trim) | length == 0
 
 - name: Ensure workspace mount point exists
   ansible.builtin.file:
-    path: "{{ devmachine_storage_mount_point }}"
+    path: "{{ storage_mount_point }}"
     state: directory
-    owner: "{{ devmachine_storage_mount_owner }}"
-    group: "{{ devmachine_storage_mount_group }}"
-    mode: "{{ devmachine_storage_mount_mode }}"
+    owner: "{{ storage_mount_owner }}"
+    group: "{{ storage_mount_group }}"
+    mode: "{{ storage_mount_mode }}"
 
 - name: Ensure fstab entry for workspace mount
   ansible.builtin.lineinfile:
     path: /etc/fstab
-    regexp: '^\S+\s+{{ devmachine_storage_mount_point | regex_escape }}\s'
-    line: "/dev/{{ devmachine_storage_vg_name }}/{{ devmachine_storage_lv_name }} {{ devmachine_storage_mount_point }} {{ devmachine_storage_fs_type }} {{ devmachine_storage_mount_options }} 0 0"
+    regexp: '^\S+\s+{{ storage_mount_point | regex_escape }}\s'
+    line: "/dev/{{ storage_vg_name }}/{{ storage_lv_name }} {{ storage_mount_point }} {{ storage_fs_type }} {{ storage_mount_options }} 0 0"
     state: present
     backup: true
 
 - name: Check whether workspace mount is active
   ansible.builtin.command:
-    cmd: "findmnt -n {{ devmachine_storage_mount_point }}"
-  register: devmachine_storage_mount_check
+    cmd: "findmnt -n {{ storage_mount_point }}"
+  register: storage_mount_check
   changed_when: false
   failed_when: false
 
 - name: Mount workspace logical volume
   ansible.builtin.command:
-    cmd: "mount {{ devmachine_storage_mount_point }}"
-  when: devmachine_storage_mount_check.rc != 0
+    cmd: "mount {{ storage_mount_point }}"
+  when: storage_mount_check.rc != 0
