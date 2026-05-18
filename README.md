@@ -13,11 +13,7 @@ Ansible-Setup für eine RHEL-9.6-Entwicklermaschine mit:
 - Steuerrechner mit Ansible
 - Zielsystem(e): RHEL 9.6
 - VS Code RPM und IntelliJ tar.gz wurden vorab auf den Steuerrechner kopiert (Standard: `./packages`)
-- Ansible-Collections aus `requirements.yml` installiert:
-
-```bash
-ansible-galaxy collection install -r requirements.yml
-```
+- Nur `ansible-core` nötig — keine zusätzlichen Galaxy-Collections.
 
 ## Linux-Pakete per PowerShell herunterladen
 
@@ -121,8 +117,11 @@ Storage / Workspace-Mount:
 - Optionale Rolle `storage` legt einen LVM-Stack (PV → VG → LV → XFS) auf einer leeren Disk an
   und mountet sie unter `devmachine_storage_mount_point` (Default `/mnt/devdata`).
 - Aktivierung via `devmachine_storage_setup_enabled: true`. Default-Device ist `/dev/sdb`.
-- Die Rolle bricht ab, wenn das Device bereits gemountet ist oder die Root-Partition trägt
-  (Schutz vor versehentlichem Daten-Wipe). Bestehende LVM-Strukturen werden idempotent erkannt.
+- Die Rolle bricht ab, wenn das Device bereits gemountet ist, die Root-Partition trägt oder
+  eine nicht-LVM-Signatur enthält (Schutz vor versehentlichem Daten-Wipe). Bestehende LVM-Strukturen
+  werden idempotent erkannt.
+- Implementiert ausschließlich mit `ansible.builtin`-Modulen (LVM-CLI via `command`); keine
+  Galaxy-Collections erforderlich.
 - Workspace-Pfade der `ide`-Rolle (`devmachine_workspace_root`, `devmachine_shared_workspace_path`)
   liegen standardmäßig unter `/mnt/devdata` und nutzen damit den Mount, sobald `storage` aktiv ist.
 
