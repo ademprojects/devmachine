@@ -1,0 +1,6 @@
+---
+ide_intellij_archive: idea-2026.1.2.tar.gz
+ide_intellij_sha256: ""
+ide_intellij_package_dir: /opt/devmachine/packages
+ide_intellij_install_dir: /opt/jetbrains
+ide_intellij_symlink: /usr/local/bin/idea

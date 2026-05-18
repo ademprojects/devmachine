@@ -1,0 +1,4 @@
+---
+chrome_rpm: google-chrome-stable_current_x86_64.rpm
+chrome_sha256: ""
+chrome_package_dir: /opt/devmachine/packages

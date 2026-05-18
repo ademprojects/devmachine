@@ -6,6 +6,15 @@
       - storage_device is match('^/dev/[A-Za-z0-9_/-]+$')
     fail_msg: "storage_device must be an absolute /dev path."
 
+- name: Validate vm_owner contains exactly one user
+  ansible.builtin.assert:
+    that:
+      - vm_owner is iterable
+      - vm_owner is not string
+      - vm_owner | length == 1
+      - vm_owner[0] | length > 0
+    fail_msg: "vm_owner must be a list with exactly one user name."
+
 - name: Check that storage device exists on host
   ansible.builtin.stat:
     path: "{{ storage_device }}"
@@ -112,12 +121,38 @@
     cmd: "mkfs.{{ storage_fs_type }} /dev/{{ storage_vg_name }}/{{ storage_lv_name }}"
   when: (storage_lv_fs_check.stdout | trim) | length == 0
 
+- name: Read passwd entry for mount owner
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ vm_owner[0] }}"
+
+- name: Read group entries
+  ansible.builtin.getent:
+    database: group
+
+- name: Resolve primary group for mount owner
+  ansible.builtin.set_fact:
+    storage_mount_owner_group: >-
+      {{
+        ansible_facts.getent_group
+        | dict2items
+        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
+        | map(attribute='key')
+        | first
+      }}
+
+- name: Ensure mount owner group was resolved
+  ansible.builtin.assert:
+    that:
+      - storage_mount_owner_group | length > 0
+    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
+
 - name: Ensure workspace mount point exists
   ansible.builtin.file:
     path: "{{ storage_mount_point }}"
     state: directory
-    owner: "{{ storage_mount_owner }}"
-    group: "{{ storage_mount_group }}"
+    owner: "{{ vm_owner[0] }}"
+    group: "{{ storage_mount_owner_group }}"
     mode: "{{ storage_mount_mode }}"
 
 - name: Ensure fstab entry for workspace mount

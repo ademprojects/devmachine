@@ -1,0 +1,10 @@
+---
+ide_vscode_rpm: code-1.120.0-1778619100.el8.x86_64.rpm
+ide_vscode_sha256: ""
+ide_vscode_package_dir: /opt/devmachine/packages
+ide_vscode_extensions:
+  - id: redhat.ansible
+    filename: redhat.ansible.vsix
+  - id: ms-python.python
+    filename: ms-python.python.vsix
+vm_owner: []

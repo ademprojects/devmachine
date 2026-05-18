@@ -1,0 +1,46 @@
+---
+- name: Ensure Chrome package directory exists
+  ansible.builtin.file:
+    path: "{{ chrome_package_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Check Chrome RPM presence in role files
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ chrome_rpm }}"
+  register: chrome_rpm_local_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail when Chrome RPM is missing from role files
+  ansible.builtin.fail:
+    msg: "Chrome RPM not found at {{ role_path }}/files/{{ chrome_rpm }}"
+  when: not chrome_rpm_local_stat.stat.exists
+  run_once: true
+
+- name: Copy Chrome RPM to remote host
+  ansible.builtin.copy:
+    src: "{{ chrome_rpm }}"
+    dest: "{{ chrome_package_dir }}/{{ chrome_rpm }}"
+    mode: "0644"
+
+- name: Read Chrome RPM checksum when provided
+  ansible.builtin.stat:
+    path: "{{ chrome_package_dir }}/{{ chrome_rpm }}"
+    checksum_algorithm: sha256
+  register: chrome_rpm_checksum_stat
+  when: chrome_sha256 | length > 0
+
+- name: Assert Chrome RPM checksum matches expected value
+  ansible.builtin.assert:
+    that:
+      - chrome_rpm_checksum_stat.stat.checksum == chrome_sha256
+    fail_msg: "Chrome RPM checksum mismatch for {{ chrome_rpm }}"
+  when: chrome_sha256 | length > 0
+
+- name: Install Chrome from local RPM
+  ansible.builtin.dnf:
+    name: "{{ chrome_package_dir }}/{{ chrome_rpm }}"
+    state: present
+    disable_gpg_check: true

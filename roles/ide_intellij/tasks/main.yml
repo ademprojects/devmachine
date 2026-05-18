@@ -1,0 +1,91 @@
+---
+- name: Ensure IntelliJ package directory exists
+  ansible.builtin.file:
+    path: "{{ ide_intellij_package_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Check IntelliJ archive presence in role files
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ ide_intellij_archive }}"
+  register: ide_intellij_archive_local_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail when IntelliJ archive is missing from role files
+  ansible.builtin.fail:
+    msg: "IntelliJ archive not found at {{ role_path }}/files/{{ ide_intellij_archive }}"
+  when: not ide_intellij_archive_local_stat.stat.exists
+  run_once: true
+
+- name: Copy IntelliJ archive to remote host
+  ansible.builtin.copy:
+    src: "{{ ide_intellij_archive }}"
+    dest: "{{ ide_intellij_package_dir }}/{{ ide_intellij_archive }}"
+    mode: "0644"
+
+- name: Read IntelliJ archive checksum when provided
+  ansible.builtin.stat:
+    path: "{{ ide_intellij_package_dir }}/{{ ide_intellij_archive }}"
+    checksum_algorithm: sha256
+  register: ide_intellij_archive_checksum_stat
+  when: ide_intellij_sha256 | length > 0
+
+- name: Assert IntelliJ archive checksum matches expected value
+  ansible.builtin.assert:
+    that:
+      - ide_intellij_archive_checksum_stat.stat.checksum == ide_intellij_sha256
+    fail_msg: "IntelliJ archive checksum mismatch for {{ ide_intellij_archive }}"
+  when: ide_intellij_sha256 | length > 0
+
+- name: Ensure IntelliJ install directory exists
+  ansible.builtin.file:
+    path: "{{ ide_intellij_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Find existing IntelliJ directories
+  ansible.builtin.find:
+    paths: "{{ ide_intellij_install_dir }}"
+    file_type: directory
+    patterns: "idea-*"
+    recurse: false
+  register: ide_intellij_existing_dirs
+
+- name: Remove existing IntelliJ directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ ide_intellij_existing_dirs.files }}"
+  when: ide_intellij_existing_dirs.matched | int > 0
+
+- name: Extract IntelliJ archive
+  ansible.builtin.unarchive:
+    src: "{{ ide_intellij_package_dir }}/{{ ide_intellij_archive }}"
+    dest: "{{ ide_intellij_install_dir }}"
+    remote_src: true
+
+- name: Find extracted IntelliJ directory
+  ansible.builtin.find:
+    paths: "{{ ide_intellij_install_dir }}"
+    file_type: directory
+    patterns: "idea-*"
+    recurse: false
+  register: ide_intellij_extracted_dirs
+
+- name: Fail when IntelliJ extraction did not produce expected directory
+  ansible.builtin.fail:
+    msg: "No extracted IntelliJ directory found in {{ ide_intellij_install_dir }}"
+  when: ide_intellij_extracted_dirs.matched | int == 0
+
+- name: Resolve IntelliJ home
+  ansible.builtin.set_fact:
+    ide_intellij_home: "{{ ide_intellij_extracted_dirs.files[0].path }}"
+
+- name: Symlink IntelliJ launcher
+  ansible.builtin.file:
+    src: "{{ ide_intellij_home }}/bin/idea.sh"
+    dest: "{{ ide_intellij_symlink }}"
+    state: link
+    force: true

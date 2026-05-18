@@ -1,18 +1,4 @@
 ---
-devmachine_package_dir: /opt/devmachine/packages
-devmachine_local_package_dir: "{{ playbook_dir }}/../packages"
-devmachine_vscode_rpm: code-latest.x86_64.rpm
-devmachine_vscode_sha256: ""
-devmachine_vscode_extensions:
-  - id: redhat.ansible
-    filename: redhat.ansible.vsix
-  - id: ms-python.python
-    filename: ms-python.python.vsix
-devmachine_intellij_archive: ideaIC-latest.tar.gz
-devmachine_intellij_sha256: ""
-devmachine_intellij_install_dir: /opt/jetbrains
-devmachine_intellij_symlink: /usr/local/bin/idea
-
 # Central endpoint definitions (set once per server)
 devmachine_nexus_scheme: https
 devmachine_nexus_fqdn: nexus.example.com
@@ -36,10 +22,10 @@ devmachine_pip_index_url: "{{ devmachine_nexus_base_url }}/pypi/simple/"
 devmachine_target_users: []
 devmachine_sudo_nopasswd: false
 devmachine_workspace_setup_enabled: true
-devmachine_workspace_root: /mnt/devdata/workspaces
+devmachine_workspace_root: /mnt/data/workspaces
 devmachine_workspace_link_name: work
 devmachine_shared_workspace_enabled: false
-devmachine_shared_workspace_path: /mnt/devdata/shared
+devmachine_shared_workspace_path: /mnt/data/shared
 devmachine_shared_workspace_owner: ""
 devmachine_shared_workspace_group: ""
 devmachine_general_user_enabled: false

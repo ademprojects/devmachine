@@ -5,8 +5,7 @@ storage_vg_name: vg_devdata
 storage_lv_name: lv_workspaces
 storage_lv_size: 100%FREE
 storage_fs_type: xfs
-storage_mount_point: /mnt/devdata
-storage_mount_owner: root
-storage_mount_group: root
+storage_mount_point: /mnt/data
 storage_mount_mode: "0755"
 storage_mount_options: defaults
+vm_owner: []

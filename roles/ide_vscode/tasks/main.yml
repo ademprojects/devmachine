@@ -1,0 +1,83 @@
+---
+- name: Validate vm_owner contains exactly one user
+  ansible.builtin.assert:
+    that:
+      - vm_owner is iterable
+      - vm_owner is not string
+      - vm_owner | length == 1
+      - vm_owner[0] | length > 0
+    fail_msg: "vm_owner must be a list with exactly one user name."
+
+- name: Ensure VS Code package directory exists
+  ansible.builtin.file:
+    path: "{{ ide_vscode_package_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Check VS Code RPM presence in role files
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ ide_vscode_rpm }}"
+  register: ide_vscode_rpm_local_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail when VS Code RPM is missing from role files
+  ansible.builtin.fail:
+    msg: "VS Code RPM not found at {{ role_path }}/files/{{ ide_vscode_rpm }}"
+  when: not ide_vscode_rpm_local_stat.stat.exists
+  run_once: true
+
+- name: Check VS Code extension VSIX presence in role files
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ item.filename }}"
+  register: ide_vscode_extension_local_stats
+  loop: "{{ ide_vscode_extensions }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail when VS Code extension VSIX is missing from role files
+  ansible.builtin.fail:
+    msg: "VS Code extension package not found at {{ role_path }}/files/{{ item.item.filename }}"
+  when: not item.stat.exists
+  loop: "{{ ide_vscode_extension_local_stats.results }}"
+  run_once: true
+
+- name: Copy VS Code RPM to remote host
+  ansible.builtin.copy:
+    src: "{{ ide_vscode_rpm }}"
+    dest: "{{ ide_vscode_package_dir }}/{{ ide_vscode_rpm }}"
+    mode: "0644"
+
+- name: Copy VS Code extension VSIX packages to remote host
+  ansible.builtin.copy:
+    src: "{{ item.filename }}"
+    dest: "{{ ide_vscode_package_dir }}/{{ item.filename }}"
+    mode: "0644"
+  loop: "{{ ide_vscode_extensions }}"
+
+- name: Read VS Code RPM checksum when provided
+  ansible.builtin.stat:
+    path: "{{ ide_vscode_package_dir }}/{{ ide_vscode_rpm }}"
+    checksum_algorithm: sha256
+  register: ide_vscode_rpm_checksum_stat
+  when: ide_vscode_sha256 | length > 0
+
+- name: Assert VS Code RPM checksum matches expected value
+  ansible.builtin.assert:
+    that:
+      - ide_vscode_rpm_checksum_stat.stat.checksum == ide_vscode_sha256
+    fail_msg: "VS Code RPM checksum mismatch for {{ ide_vscode_rpm }}"
+  when: ide_vscode_sha256 | length > 0
+
+- name: Install VS Code from local RPM
+  ansible.builtin.dnf:
+    name: "{{ ide_vscode_package_dir }}/{{ ide_vscode_rpm }}"
+    state: present
+    disable_gpg_check: true
+
+- name: Provision VS Code extensions for vm_owner
+  ansible.builtin.include_tasks: per_user.yml
+  vars:
+    ide_vscode_target_user: "{{ vm_owner[0] }}"
