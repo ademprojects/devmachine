@@ -1,0 +1,14 @@
+---
+# Minor-version upgrade of a Nexus-mirrored RHEL host. The role assumes repo
+# files in /etc/yum.repos.d/ reference the version explicitly (or via the
+# $releasever dnf variable) and not via subscription-manager.
+common_rhelupgrade_from_version: "9.6"
+common_rhelupgrade_to_version: "9.8"
+
+common_rhelupgrade_repo_dir: /etc/yum.repos.d
+common_rhelupgrade_releasever_file: /etc/dnf/vars/releasever
+common_rhelupgrade_backup_root: /var/backups
+
+# When true, reboot the host after dnf reports it is needed (kernel update).
+common_rhelupgrade_reboot_if_required: true
+common_rhelupgrade_reboot_timeout: 600

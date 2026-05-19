@@ -1,0 +1,145 @@
+---
+- name: Gather distribution facts
+  ansible.builtin.setup:
+    gather_subset:
+      - distribution
+
+- name: Assert host is RHEL 9 family
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution in ['RedHat', 'AlmaLinux', 'Rocky']
+      - ansible_facts.distribution_major_version == '9'
+    fail_msg: >-
+      common_rhelupgrade only supports RHEL/Alma/Rocky 9.x — got
+      {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}.
+
+- name: Report already-upgraded hosts and end further work
+  ansible.builtin.debug:
+    msg: "Host already on {{ common_rhelupgrade_to_version }}, nothing to do."
+  when: ansible_facts.distribution_version == common_rhelupgrade_to_version
+
+- name: Run minor-version upgrade
+  when: ansible_facts.distribution_version != common_rhelupgrade_to_version
+  block:
+    - name: Assert current version matches expected from_version
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution_version == common_rhelupgrade_from_version
+        fail_msg: >-
+          Expected current version {{ common_rhelupgrade_from_version }} but
+          host reports {{ ansible_facts.distribution_version }}. Refusing to
+          upgrade — set common_rhelupgrade_from_version explicitly if intentional.
+
+    - name: Announce upgrade plan
+      ansible.builtin.debug:
+        msg: >-
+          Upgrading {{ inventory_hostname }} from RHEL
+          {{ common_rhelupgrade_from_version }} → {{ common_rhelupgrade_to_version }}.
+
+    # ---- Backup ----
+
+    - name: Create timestamped backup directory for repo files
+      ansible.builtin.file:
+        path: "{{ common_rhelupgrade_backup_root }}/yum.repos.d-{{ ansible_date_time.iso8601_basic_short }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      register: common_rhelupgrade_backup_dir
+
+    - name: Find all .repo files
+      ansible.builtin.find:
+        paths: "{{ common_rhelupgrade_repo_dir }}"
+        patterns: "*.repo"
+      register: common_rhelupgrade_repo_files
+
+    - name: Back up .repo files before rewrite
+      ansible.builtin.copy:
+        src: "{{ item.path }}"
+        dest: "{{ common_rhelupgrade_backup_dir.path }}/{{ item.path | basename }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ common_rhelupgrade_repo_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    # ---- Switch version ----
+
+    - name: Stat dnf releasever variable file
+      ansible.builtin.stat:
+        path: "{{ common_rhelupgrade_releasever_file }}"
+      register: common_rhelupgrade_releasever_stat
+
+    - name: Update $releasever to target version (when explicitly set)
+      ansible.builtin.copy:
+        dest: "{{ common_rhelupgrade_releasever_file }}"
+        content: "{{ common_rhelupgrade_to_version }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+      when: common_rhelupgrade_releasever_stat.stat.exists
+
+    - name: Rewrite hardcoded from-version references in repo files to {{ common_rhelupgrade_to_version }}
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: "(?<![0-9.]){{ common_rhelupgrade_from_version | regex_escape }}(?![0-9.])"
+        replace: "{{ common_rhelupgrade_to_version }}"
+      loop: "{{ common_rhelupgrade_repo_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    # ---- DNF clean + upgrade ----
+
+    - name: Clean dnf metadata cache
+      ansible.builtin.command:
+        cmd: dnf clean all
+      changed_when: true
+
+    - name: Refresh dnf metadata against new release
+      ansible.builtin.command:
+        cmd: dnf makecache
+      changed_when: false
+
+    - name: Upgrade all packages to {{ common_rhelupgrade_to_version }}
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+        allowerasing: true
+
+    # ---- Reboot if required ----
+
+    - name: Check whether reboot is required
+      ansible.builtin.command:
+        cmd: dnf needs-restarting -r
+      register: common_rhelupgrade_needs_reboot
+      failed_when: false
+      changed_when: false
+
+    - name: Reboot to apply kernel/userspace updates
+      ansible.builtin.reboot:
+        msg: "Rebooting for RHEL {{ common_rhelupgrade_from_version }} → {{ common_rhelupgrade_to_version }} upgrade"
+        reboot_timeout: "{{ common_rhelupgrade_reboot_timeout }}"
+      when:
+        - common_rhelupgrade_reboot_if_required | bool
+        - common_rhelupgrade_needs_reboot.rc != 0
+
+    # ---- Verify ----
+
+    - name: Re-read distribution facts after upgrade
+      ansible.builtin.setup:
+        gather_subset:
+          - distribution
+
+    - name: Assert successful upgrade
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution_version == common_rhelupgrade_to_version
+        fail_msg: >-
+          Upgrade verification failed: expected
+          {{ common_rhelupgrade_to_version }}, host reports
+          {{ ansible_facts.distribution_version }}.
+        success_msg: >-
+          Host is now on RHEL {{ common_rhelupgrade_to_version }}.

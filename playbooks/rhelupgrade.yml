@@ -1,0 +1,17 @@
+---
+# Minor-version upgrade for Nexus-mirrored RHEL hosts.
+# Usage:
+#   ansible-playbook -i inventory.ini playbooks/rhelupgrade.yml \
+#     -e common_rhelupgrade_from_version=9.6 \
+#     -e common_rhelupgrade_to_version=9.8
+#
+# Run serially (one host at a time) so a broken upgrade doesn't take the whole
+# fleet down. After this playbook completes, re-run playbooks/devmachine.yml to
+# pick up OS-version-aware changes (e.g. app_java auto-includes Java 25 on 9.7+).
+- name: Upgrade RHEL minor version
+  hosts: "{{ target_hosts | default('devmachines') }}"
+  become: true
+  gather_facts: true
+  serial: 1
+  roles:
+    - role: common_rhelupgrade

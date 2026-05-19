@@ -1,4 +1,12 @@
 ---
+- name: Auto-include OpenJDK 25 and set as default on RHEL 9.7+
+  ansible.builtin.set_fact:
+    app_java_packages: "{{ (['java-25-openjdk-devel'] + app_java_packages) | unique }}"
+    app_java_default_version: "25"
+  when:
+    - app_java_auto_include_25 | bool
+    - ansible_facts.distribution_version is version('9.7', '>=')
+
 - name: Install OpenJDK development packages
   ansible.builtin.dnf:
     name: "{{ app_java_packages }}"

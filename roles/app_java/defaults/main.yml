@@ -1,6 +1,10 @@
 ---
+# Base set for RHEL 9.6. On RHEL 9.7+ (where java-25-openjdk-devel is in
+# AppStream), the role auto-prepends Java 25 and uses it as default — set
+# app_java_auto_include_25: false to opt out and use the explicit values below.
 app_java_packages:
   - java-21-openjdk-devel
   - java-17-openjdk-devel
 app_java_default_version: "21"
+app_java_auto_include_25: true
 app_java_profile_path: /etc/profile.d/app-java.sh
