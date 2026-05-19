@@ -1,10 +1,12 @@
 ---
 # Resolves play-level facts about the target user named by vm_owner[0]:
-#   vm_owner_name  — the user name string
-#   vm_owner_uid   — numeric uid
-#   vm_owner_gid   — numeric primary gid
-#   vm_owner_home  — home directory path
-#   vm_owner_group — primary group name
+#   vm_owner_name     — the user name string
+#   vm_owner_uid      — numeric uid
+#   vm_owner_gid      — numeric primary gid
+#   vm_owner_home     — home directory path
+#   vm_owner_group    — primary group name
+#   vm_owner_email    — e-mail address (from user_data)
+#   vm_owner_fullname — full name (from user_data)
 # Consumer roles can rely on these without re-running getent themselves.
 
 - name: Validate vm_owner contains exactly one user
@@ -14,7 +16,8 @@
       - vm_owner is not string
       - vm_owner | length == 1
       - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
+      - user_data is defined
+    fail_msg: "vm_owner must be a list with exactly one user name, and user_data must be defined."
 
 - name: Read passwd entry for vm_owner
   ansible.builtin.getent:
@@ -45,3 +48,21 @@
     that:
       - vm_owner_group | length > 0
     fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
+
+- name: Find vm_owner entry in user_data
+  ansible.builtin.set_fact:
+    _vm_owner_matches: >-
+      {{ user_data
+         | selectattr('username', 'equalto', vm_owner[0])
+         | list }}
+
+- name: Ensure vm_owner exists in user_data
+  ansible.builtin.assert:
+    that:
+      - _vm_owner_matches | length == 1
+    fail_msg: "vm_owner '{{ vm_owner[0] }}' not found in user_data."
+
+- name: Resolve vm_owner contact facts
+  ansible.builtin.set_fact:
+    vm_owner_email: "{{ _vm_owner_matches[0].email }}"
+    vm_owner_fullname: "{{ _vm_owner_matches[0].fullname }}"
