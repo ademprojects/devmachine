@@ -2,6 +2,10 @@
 app_pyenv_version: "2.6.31"
 app_pyenv_archive_url: "{{ devmachine_nexus_base_url }}/raw/pyenv/pyenv-{{ app_pyenv_version }}.tar.gz"
 app_pyenv_install_subdir: .pyenv
+# Pyenv lives on the data disk (Python builds + installed versions can grow large).
+# A symlink {{ vm_owner_home }}/.pyenv → app_pyenv_install_dir keeps tooling that
+# assumes ~/.pyenv (incl. profile.d's $HOME/.pyenv check) working transparently.
+app_pyenv_install_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/pyenv/{{ vm_owner_name }}"
 app_pyenv_python_build_mirror_url: "{{ devmachine_nexus_base_url }}/pyenv-mirror/"
 app_pyenv_profile_path: /etc/profile.d/app-pyenv.sh
 app_pyenv_python_version: "3.14.5"
@@ -17,4 +21,3 @@ app_pyenv_build_dependencies:
   - readline-devel
   - sqlite-devel
   - xz-devel
-vm_owner: []

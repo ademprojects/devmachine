@@ -1,61 +1,55 @@
 ---
-- name: Validate vm_owner contains exactly one user
-  ansible.builtin.assert:
-    that:
-      - vm_owner is iterable
-      - vm_owner is not string
-      - vm_owner | length == 1
-      - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
-
-- name: Read passwd entry for vm_owner
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ vm_owner[0] }}"
-
-- name: Read group entries
-  ansible.builtin.getent:
-    database: group
-
-- name: Resolve target user home directory
-  ansible.builtin.set_fact:
-    app_nvm_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
-
-- name: Resolve target user primary group
-  ansible.builtin.set_fact:
-    app_nvm_user_group: >-
-      {{
-        ansible_facts.getent_group
-        | dict2items
-        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
-        | map(attribute='key')
-        | first
-      }}
-
-- name: Ensure target user primary group was resolved
-  ansible.builtin.assert:
-    that:
-      - app_nvm_user_group | length > 0
-    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
+- name: Ensure nvm install parent directory exists
+  ansible.builtin.file:
+    path: "{{ app_nvm_install_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
 - name: Ensure nvm install directory exists
   ansible.builtin.file:
-    path: "{{ app_nvm_user_home }}/{{ app_nvm_install_subdir }}"
+    path: "{{ app_nvm_install_dir }}"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_nvm_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
 
 - name: Install nvm from Nexus tarball
   ansible.builtin.unarchive:
     src: "{{ app_nvm_archive_url }}"
-    dest: "{{ app_nvm_user_home }}/{{ app_nvm_install_subdir }}"
+    dest: "{{ app_nvm_install_dir }}"
     remote_src: true
     extra_opts:
       - --strip-components=1
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_nvm_user_group }}"
-    creates: "{{ app_nvm_user_home }}/{{ app_nvm_install_subdir }}/nvm.sh"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    creates: "{{ app_nvm_install_dir }}/nvm.sh"
+
+- name: Stat existing ~/.nvm path
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/{{ app_nvm_install_subdir }}"
+  register: app_nvm_home_link
+
+- name: Refuse to clobber an existing real ~/.nvm directory
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/{{ app_nvm_install_subdir }} exists as a real directory.
+      Move its contents to {{ app_nvm_install_dir }} manually and remove the directory,
+      then re-run the playbook. The role will not silently replace a real directory.
+  when:
+    - app_nvm_home_link.stat.exists
+    - app_nvm_home_link.stat.isdir
+    - not app_nvm_home_link.stat.islnk
+
+- name: Symlink ~/.nvm to data-disk install
+  ansible.builtin.file:
+    src: "{{ app_nvm_install_dir }}"
+    dest: "{{ vm_owner_home }}/{{ app_nvm_install_subdir }}"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    force: true
 
 - name: Write nvm shell init to /etc/profile.d
   ansible.builtin.copy:
@@ -74,13 +68,13 @@
   ansible.builtin.shell:
     cmd: |
       set -euo pipefail
-      . "{{ app_nvm_user_home }}/{{ app_nvm_install_subdir }}/nvm.sh"
+      . "{{ app_nvm_install_dir }}/nvm.sh"
       nvm install {{ app_nvm_node_version }}
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   environment:
-    HOME: "{{ app_nvm_user_home }}"
-    NVM_DIR: "{{ app_nvm_user_home }}/{{ app_nvm_install_subdir }}"
+    HOME: "{{ vm_owner_home }}"
+    NVM_DIR: "{{ app_nvm_install_dir }}"
     NVM_NODEJS_ORG_MIRROR: "{{ app_nvm_nodejs_mirror_url }}"
     HTTP_PROXY: "{{ app_nvm_proxy_url }}"
     HTTPS_PROXY: "{{ app_nvm_proxy_url }}"
@@ -93,21 +87,21 @@
   ansible.builtin.shell:
     cmd: |
       set -euo pipefail
-      . "{{ app_nvm_user_home }}/{{ app_nvm_install_subdir }}/nvm.sh"
+      . "{{ app_nvm_install_dir }}/nvm.sh"
       nvm alias default '{{ "lts/*" if app_nvm_node_version == "--lts" else app_nvm_node_version }}'
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   environment:
-    HOME: "{{ app_nvm_user_home }}"
-    NVM_DIR: "{{ app_nvm_user_home }}/{{ app_nvm_install_subdir }}"
+    HOME: "{{ vm_owner_home }}"
+    NVM_DIR: "{{ app_nvm_install_dir }}"
   changed_when: false
   when: app_nvm_set_default | bool
 
 - name: Configure npm registry to Nexus for vm_owner
   ansible.builtin.copy:
-    dest: "{{ app_nvm_user_home }}/.npmrc"
+    dest: "{{ vm_owner_home }}/.npmrc"
     content: |
       registry={{ app_nvm_npm_registry_url }}
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_nvm_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0644"

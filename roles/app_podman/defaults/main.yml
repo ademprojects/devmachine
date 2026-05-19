@@ -13,7 +13,7 @@ app_podman_enable_lingering: true
 app_podman_verify_rootless: true
 
 # Container image / layer storage relocated to the data disk
-app_podman_storage_base: "{{ storage_mount_point | default('/mnt/data') }}/containers"
+app_podman_storage_base: "{{ common_storage_mount_point | default('/mnt/data') }}/containers"
 app_podman_storage_driver: overlay
 app_podman_storage_mount_program: /usr/bin/fuse-overlayfs
 
@@ -21,7 +21,26 @@ app_podman_storage_mount_program: /usr/bin/fuse-overlayfs
 app_podman_harbor_host: ""
 app_podman_unqualified_search_registries: []
 
+# Short-name aliases — drop-in /etc/containers/registries.conf.d/99-devmachine-shortnames.conf.
+# The OS-default 000-shortnames.conf is removed by the role because its docker.io
+# targets are unreachable on offline hosts. Add/override entries via group_vars
+# or host_vars as needed.
+app_podman_shortname_aliases:
+  alpine: "{{ app_podman_harbor_host }}/library/alpine"
+  busybox: "{{ app_podman_harbor_host }}/library/busybox"
+  debian: "{{ app_podman_harbor_host }}/library/debian"
+  fedora: "{{ app_podman_harbor_host }}/library/fedora"
+  ubuntu: "{{ app_podman_harbor_host }}/library/ubuntu"
+  nginx: "{{ app_podman_harbor_host }}/library/nginx"
+  httpd: "{{ app_podman_harbor_host }}/library/httpd"
+  haproxy: "{{ app_podman_harbor_host }}/library/haproxy"
+  redis: "{{ app_podman_harbor_host }}/library/redis"
+  postgres: "{{ app_podman_harbor_host }}/library/postgres"
+  mariadb: "{{ app_podman_harbor_host }}/library/mariadb"
+  mongo: "{{ app_podman_harbor_host }}/library/mongo"
+  python: "{{ app_podman_harbor_host }}/library/python"
+  node: "{{ app_podman_harbor_host }}/library/node"
+  openjdk: "{{ app_podman_harbor_host }}/library/openjdk"
+
 # auth.json for podman / docker registry login (root + vm_owner)
 app_podman_auth_json_vault_file: "{{ playbook_dir }}/../inventory/group_vars/all/app_podman_auth.vault.yml"
-
-vm_owner: []

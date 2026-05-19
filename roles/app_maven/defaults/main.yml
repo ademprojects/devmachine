@@ -8,4 +8,5 @@ app_maven_nexus_repository: "{{ devmachine_nexus_base_url }}/maven-public/"
 app_maven_proxy_host: "{{ devmachine_proxy_fqdn }}"
 app_maven_proxy_port: "{{ devmachine_proxy_port }}"
 app_maven_non_proxy_hosts: "localhost|127.0.0.1"
-vm_owner: []
+# Maven local repository on the data disk (avoids filling /home with build artifacts).
+app_maven_local_repository: "{{ common_storage_mount_point | default('/mnt/data') }}/maven/{{ vm_owner_name }}/repository"

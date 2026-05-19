@@ -1,13 +1,4 @@
 ---
-- name: Validate vm_owner contains exactly one user
-  ansible.builtin.assert:
-    that:
-      - vm_owner is iterable
-      - vm_owner is not string
-      - vm_owner | length == 1
-      - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
-
 - name: Ensure Maven install base directory exists
   ansible.builtin.file:
     path: "{{ app_maven_install_base }}"
@@ -43,49 +34,27 @@
       export MAVEN_HOME="$M2_HOME"
       export PATH="$M2_HOME/bin:$PATH"
 
-- name: Read passwd entry for vm_owner
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ vm_owner[0] }}"
-
-- name: Read group entries
-  ansible.builtin.getent:
-    database: group
-
-- name: Resolve target user home directory
-  ansible.builtin.set_fact:
-    app_maven_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
-
-- name: Resolve target user primary group
-  ansible.builtin.set_fact:
-    app_maven_user_group: >-
-      {{
-        ansible_facts.getent_group
-        | dict2items
-        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
-        | map(attribute='key')
-        | first
-      }}
-
-- name: Ensure target user primary group was resolved
-  ansible.builtin.assert:
-    that:
-      - app_maven_user_group | length > 0
-    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
-
 - name: Ensure ~vm_owner/.m2 exists
   ansible.builtin.file:
-    path: "{{ app_maven_user_home }}/.m2"
+    path: "{{ vm_owner_home }}/.m2"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_maven_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
 
-- name: Configure ~vm_owner/.m2/settings.xml with proxy and Nexus mirror
+- name: Ensure Maven local repository on data disk exists
+  ansible.builtin.file:
+    path: "{{ app_maven_local_repository }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Configure ~vm_owner/.m2/settings.xml with proxy, Nexus mirror, local repo
   ansible.builtin.copy:
-    dest: "{{ app_maven_user_home }}/.m2/settings.xml"
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_maven_user_group }}"
+    dest: "{{ vm_owner_home }}/.m2/settings.xml"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0644"
     content: |
       <?xml version="1.0" encoding="UTF-8"?>
@@ -93,6 +62,7 @@
                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                 xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
                                     https://maven.apache.org/xsd/settings-1.0.0.xsd">
+        <localRepository>{{ app_maven_local_repository }}</localRepository>
         <proxies>
           <proxy>
             <id>devmachine-http</id>

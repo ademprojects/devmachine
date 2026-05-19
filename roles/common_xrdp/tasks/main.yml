@@ -1,21 +1,12 @@
 ---
-- name: Validate vm_owner contains exactly one user
-  ansible.builtin.assert:
-    that:
-      - vm_owner is iterable
-      - vm_owner is not string
-      - vm_owner | length == 1
-      - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
-
 - name: Install XFCE desktop packages
   ansible.builtin.dnf:
-    name: "{{ xrdp_xfce_packages }}"
+    name: "{{ common_xrdp_xfce_packages }}"
     state: present
 
 - name: Install xrdp packages
   ansible.builtin.dnf:
-    name: "{{ xrdp_packages }}"
+    name: "{{ common_xrdp_packages }}"
     state: present
 
 - name: Apply xrdp.ini settings
@@ -29,7 +20,7 @@
     mode: "0644"
     backup: true
     state: present
-  loop: "{{ xrdp_xrdp_ini_entries }}"
+  loop: "{{ common_xrdp_ini_entries }}"
   notify: Restart xrdp
 
 - name: Apply sesman.ini settings
@@ -43,58 +34,28 @@
     mode: "0644"
     backup: true
     state: present
-  loop: "{{ xrdp_sesman_ini_entries }}"
+  loop: "{{ common_xrdp_sesman_ini_entries }}"
   notify: Restart xrdp
-
-- name: Read passwd entry for xrdp target user
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ vm_owner[0] }}"
-
-- name: Read group entries
-  ansible.builtin.getent:
-    database: group
-
-- name: Resolve target user home directory
-  ansible.builtin.set_fact:
-    xrdp_target_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
-
-- name: Resolve target user primary group
-  ansible.builtin.set_fact:
-    xrdp_target_user_group: >-
-      {{
-        ansible_facts.getent_group
-        | dict2items
-        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
-        | map(attribute='key')
-        | first
-      }}
-
-- name: Ensure target user primary group was resolved
-  ansible.builtin.assert:
-    that:
-      - xrdp_target_user_group | length > 0
-    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
 
 - name: Configure .xsession for vm_owner to launch XFCE
   ansible.builtin.copy:
-    dest: "{{ xrdp_target_user_home }}/.xsession"
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ xrdp_target_user_group }}"
+    dest: "{{ vm_owner_home }}/.xsession"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
     content: |
       #!/bin/sh
-      exec {{ xrdp_xsession_command }}
+      exec {{ common_xrdp_xsession_command }}
 
 - name: Configure .Xclients for vm_owner to launch XFCE
   ansible.builtin.copy:
-    dest: "{{ xrdp_target_user_home }}/.Xclients"
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ xrdp_target_user_group }}"
+    dest: "{{ vm_owner_home }}/.Xclients"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
     content: |
       #!/bin/sh
-      exec {{ xrdp_xsession_command }}
+      exec {{ common_xrdp_xsession_command }}
 
 - name: Configure /etc/skel/.xsession default for new users
   ansible.builtin.copy:
@@ -104,8 +65,8 @@
     mode: "0755"
     content: |
       #!/bin/sh
-      exec {{ xrdp_xsession_command }}
-  when: xrdp_skel_enabled | bool
+      exec {{ common_xrdp_xsession_command }}
+  when: common_xrdp_skel_enabled | bool
 
 - name: Configure /etc/skel/.Xclients default for new users
   ansible.builtin.copy:
@@ -115,52 +76,33 @@
     mode: "0755"
     content: |
       #!/bin/sh
-      exec {{ xrdp_xsession_command }}
-  when: xrdp_skel_enabled | bool
+      exec {{ common_xrdp_xsession_command }}
+  when: common_xrdp_skel_enabled | bool
 
 - name: Restore SELinux contexts on xrdp paths
   ansible.builtin.command:
     cmd: restorecon -RvF /etc/xrdp /usr/sbin/xrdp /usr/sbin/xrdp-sesman
-  register: xrdp_restorecon
-  changed_when: xrdp_restorecon.stdout | length > 0
+  register: common_xrdp_restorecon
+  changed_when: common_xrdp_restorecon.stdout | length > 0
   failed_when: false
-  when: xrdp_selinux_restorecon | bool
+  when: common_xrdp_selinux_restorecon | bool
 
 - name: Enable and start xrdp service
   ansible.builtin.systemd:
-    name: "{{ xrdp_service_name }}"
+    name: "{{ common_xrdp_service_name }}"
     enabled: true
     state: started
 
-- name: Check whether firewalld is active
-  ansible.builtin.command:
-    cmd: systemctl is-active firewalld
-  register: xrdp_firewalld_state
-  changed_when: false
-  failed_when: false
+- name: Gather service facts
+  ansible.builtin.service_facts:
+  when: common_xrdp_open_firewall | bool
 
-- name: Query firewalld for xrdp port
-  ansible.builtin.command:
-    cmd: "firewall-cmd --permanent --query-port={{ xrdp_firewall_port }}/tcp"
-  register: xrdp_firewall_port_check
-  changed_when: false
-  failed_when: false
+- name: Open xrdp port in firewalld
+  ansible.posix.firewalld:
+    port: "{{ common_xrdp_firewall_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
   when:
-    - xrdp_open_firewall | bool
-    - xrdp_firewalld_state.stdout | trim == 'active'
-
-- name: Add xrdp port to firewalld permanent ruleset
-  ansible.builtin.command:
-    cmd: "firewall-cmd --permanent --add-port={{ xrdp_firewall_port }}/tcp"
-  when:
-    - xrdp_open_firewall | bool
-    - xrdp_firewalld_state.stdout | trim == 'active'
-    - xrdp_firewall_port_check.rc != 0
-
-- name: Reload firewalld
-  ansible.builtin.command:
-    cmd: firewall-cmd --reload
-  when:
-    - xrdp_open_firewall | bool
-    - xrdp_firewalld_state.stdout | trim == 'active'
-    - xrdp_firewall_port_check.rc != 0
+    - common_xrdp_open_firewall | bool
+    - (ansible_facts.services['firewalld.service'].state | default('')) == 'running'

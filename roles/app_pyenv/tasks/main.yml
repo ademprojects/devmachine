@@ -1,66 +1,60 @@
 ---
-- name: Validate vm_owner contains exactly one user
-  ansible.builtin.assert:
-    that:
-      - vm_owner is iterable
-      - vm_owner is not string
-      - vm_owner | length == 1
-      - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
-
 - name: Install pyenv build dependencies (gcc, make, *-devel for Python source build)
   ansible.builtin.dnf:
     name: "{{ app_pyenv_build_dependencies }}"
     state: present
 
-- name: Read passwd entry for vm_owner
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ vm_owner[0] }}"
-
-- name: Read group entries
-  ansible.builtin.getent:
-    database: group
-
-- name: Resolve target user home directory
-  ansible.builtin.set_fact:
-    app_pyenv_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
-
-- name: Resolve target user primary group
-  ansible.builtin.set_fact:
-    app_pyenv_user_group: >-
-      {{
-        ansible_facts.getent_group
-        | dict2items
-        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
-        | map(attribute='key')
-        | first
-      }}
-
-- name: Ensure target user primary group was resolved
-  ansible.builtin.assert:
-    that:
-      - app_pyenv_user_group | length > 0
-    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
+- name: Ensure pyenv install parent directory exists
+  ansible.builtin.file:
+    path: "{{ app_pyenv_install_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
 - name: Ensure pyenv install directory exists
   ansible.builtin.file:
-    path: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    path: "{{ app_pyenv_install_dir }}"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_pyenv_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
 
 - name: Install pyenv from Nexus tarball
   ansible.builtin.unarchive:
     src: "{{ app_pyenv_archive_url }}"
-    dest: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    dest: "{{ app_pyenv_install_dir }}"
     remote_src: true
     extra_opts:
       - --strip-components=1
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_pyenv_user_group }}"
-    creates: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}/bin/pyenv"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    creates: "{{ app_pyenv_install_dir }}/bin/pyenv"
+
+- name: Stat existing ~/.pyenv path
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/{{ app_pyenv_install_subdir }}"
+  register: app_pyenv_home_link
+
+- name: Refuse to clobber an existing real ~/.pyenv directory
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/{{ app_pyenv_install_subdir }} exists as a real directory.
+      Move its contents to {{ app_pyenv_install_dir }} manually and remove the directory,
+      then re-run the playbook. The role will not silently replace a real directory.
+  when:
+    - app_pyenv_home_link.stat.exists
+    - app_pyenv_home_link.stat.isdir
+    - not app_pyenv_home_link.stat.islnk
+
+- name: Symlink ~/.pyenv to data-disk install
+  ansible.builtin.file:
+    src: "{{ app_pyenv_install_dir }}"
+    dest: "{{ vm_owner_home }}/{{ app_pyenv_install_subdir }}"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    force: true
 
 - name: Write pyenv shell init to /etc/profile.d
   ansible.builtin.copy:
@@ -80,15 +74,15 @@
   ansible.builtin.shell:
     cmd: |
       set -euo pipefail
-      "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}/bin/pyenv" install --list \
+      "{{ app_pyenv_install_dir }}/bin/pyenv" install --list \
         | sed 's/^[[:space:]]*//' \
         | grep -E '^3\.[0-9]+\.[0-9]+$' \
         | tail -1
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   environment:
-    HOME: "{{ app_pyenv_user_home }}"
-    PYENV_ROOT: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    HOME: "{{ vm_owner_home }}"
+    PYENV_ROOT: "{{ app_pyenv_install_dir }}"
     HTTP_PROXY: "{{ app_pyenv_proxy_url }}"
     HTTPS_PROXY: "{{ app_pyenv_proxy_url }}"
     http_proxy: "{{ app_pyenv_proxy_url }}"
@@ -115,12 +109,12 @@
 
 - name: Install target Python via pyenv (build from source through Nexus mirror)
   ansible.builtin.command:
-    cmd: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}/bin/pyenv install --skip-existing {{ app_pyenv_target_python }}"
+    cmd: "{{ app_pyenv_install_dir }}/bin/pyenv install --skip-existing {{ app_pyenv_target_python }}"
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   environment:
-    HOME: "{{ app_pyenv_user_home }}"
-    PYENV_ROOT: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    HOME: "{{ vm_owner_home }}"
+    PYENV_ROOT: "{{ app_pyenv_install_dir }}"
     PYTHON_BUILD_MIRROR_URL: "{{ app_pyenv_python_build_mirror_url }}"
     HTTP_PROXY: "{{ app_pyenv_proxy_url }}"
     HTTPS_PROXY: "{{ app_pyenv_proxy_url }}"
@@ -131,28 +125,28 @@
 
 - name: Set installed Python as global default for vm_owner
   ansible.builtin.command:
-    cmd: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}/bin/pyenv global {{ app_pyenv_target_python }}"
+    cmd: "{{ app_pyenv_install_dir }}/bin/pyenv global {{ app_pyenv_target_python }}"
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   environment:
-    HOME: "{{ app_pyenv_user_home }}"
-    PYENV_ROOT: "{{ app_pyenv_user_home }}/{{ app_pyenv_install_subdir }}"
+    HOME: "{{ vm_owner_home }}"
+    PYENV_ROOT: "{{ app_pyenv_install_dir }}"
   changed_when: false
 
 - name: Ensure pip config directory exists for vm_owner
   ansible.builtin.file:
-    path: "{{ app_pyenv_user_home }}/.pip"
+    path: "{{ vm_owner_home }}/.pip"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_pyenv_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
 
 - name: Configure pip index to Nexus for vm_owner
   ansible.builtin.copy:
-    dest: "{{ app_pyenv_user_home }}/.pip/pip.conf"
+    dest: "{{ vm_owner_home }}/.pip/pip.conf"
     content: |
       [global]
       index-url = {{ app_pyenv_pip_index_url }}
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_pyenv_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0644"

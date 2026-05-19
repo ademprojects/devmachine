@@ -1,0 +1,20 @@
+# Ansible runtime state
+.ansible/
+*.retry
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Large binaries downloaded into role files/ by tools/*.sh
+# (these are fetched on the controller, not committed)
+roles/*/files/*.rpm
+roles/*/files/*.tar.gz
+roles/*/files/*.tar.xz
+roles/*/files/*.zip
+roles/*/files/plugins/*.vsix
+roles/*/files/plugins/*.zip
+roles/*/files/plugins/*.jar

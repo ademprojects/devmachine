@@ -4,13 +4,6 @@
     name: "{{ app_java_packages }}"
     state: present
 
-- name: Resolve JAVA_HOME for the default Java version
-  ansible.builtin.command:
-    cmd: "rpm -q --qf '%{INSTPREFIXES}\n' java-{{ app_java_default_version }}-openjdk-devel"
-  register: app_java_home_query
-  changed_when: false
-  failed_when: false
-
 - name: Find default Java home via /usr/lib/jvm symlink
   ansible.builtin.stat:
     path: "/usr/lib/jvm/java-{{ app_java_default_version }}-openjdk"

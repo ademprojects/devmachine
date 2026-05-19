@@ -4,10 +4,11 @@
   become: true
   gather_facts: true
   roles:
+    - role: common_vm_owner_facts
     - role: common_storage
-      when: storage_setup_enabled | default(false) | bool
-    - role: common_packages
+      when: common_storage_setup_enabled | default(false) | bool
     - role: common_nexus
+    - role: common_packages
     - role: common_sysctl
     - role: common_locale
     - role: common_sshd

@@ -8,7 +8,6 @@
         | reject('match', '^\\.')
         | sort
       }}
-  run_once: true
 
 - name: Fail when no Postman tarball is present in role files
   ansible.builtin.fail:

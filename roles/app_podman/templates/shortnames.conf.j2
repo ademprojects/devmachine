@@ -1,0 +1,8 @@
+# Managed by Ansible (app_podman role) — do not edit by hand.
+# Resolves short image names to the configured Harbor instance.
+# OS-default 000-shortnames.conf is removed by the role because it points to
+# docker.io, which is unreachable on offline hosts.
+[aliases]
+{% for name, target in app_podman_shortname_aliases | dictsort %}
+"{{ name }}" = "{{ target }}"
+{% endfor %}

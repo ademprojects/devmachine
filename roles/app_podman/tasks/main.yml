@@ -1,13 +1,4 @@
 ---
-- name: Validate vm_owner contains exactly one user
-  ansible.builtin.assert:
-    that:
-      - vm_owner is iterable
-      - vm_owner is not string
-      - vm_owner | length == 1
-      - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
-
 - name: Install podman packages
   ansible.builtin.dnf:
     name: "{{ app_podman_packages }}"
@@ -19,41 +10,11 @@
     state: present
   when: app_podman_docker_compat | bool
 
-- name: Read passwd entry for podman target user
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ vm_owner[0] }}"
-
-- name: Read group entries
-  ansible.builtin.getent:
-    database: group
-
-- name: Resolve target user home directory
-  ansible.builtin.set_fact:
-    app_podman_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
-
-- name: Resolve target user primary group
-  ansible.builtin.set_fact:
-    app_podman_user_group: >-
-      {{
-        ansible_facts.getent_group
-        | dict2items
-        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
-        | map(attribute='key')
-        | first
-      }}
-
-- name: Ensure target user primary group was resolved
-  ansible.builtin.assert:
-    that:
-      - app_podman_user_group | length > 0
-    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
-
 - name: Ensure subuid entry for vm_owner
   ansible.builtin.lineinfile:
     path: /etc/subuid
-    regexp: "^{{ vm_owner[0] }}:"
-    line: "{{ vm_owner[0] }}:{{ app_podman_subuid_start }}:{{ app_podman_subuid_count }}"
+    regexp: "^{{ vm_owner_name }}:"
+    line: "{{ vm_owner_name }}:{{ app_podman_subuid_start }}:{{ app_podman_subuid_count }}"
     create: true
     owner: root
     group: root
@@ -62,8 +23,8 @@
 - name: Ensure subgid entry for vm_owner
   ansible.builtin.lineinfile:
     path: /etc/subgid
-    regexp: "^{{ vm_owner[0] }}:"
-    line: "{{ vm_owner[0] }}:{{ app_podman_subuid_start }}:{{ app_podman_subuid_count }}"
+    regexp: "^{{ vm_owner_name }}:"
+    line: "{{ vm_owner_name }}:{{ app_podman_subuid_start }}:{{ app_podman_subuid_count }}"
     create: true
     owner: root
     group: root
@@ -71,8 +32,8 @@
 
 - name: Enable systemd lingering for vm_owner
   ansible.builtin.command:
-    cmd: "loginctl enable-linger {{ vm_owner[0] }}"
-    creates: "/var/lib/systemd/linger/{{ vm_owner[0] }}"
+    cmd: "loginctl enable-linger {{ vm_owner_name }}"
+    creates: "/var/lib/systemd/linger/{{ vm_owner_name }}"
   when: app_podman_enable_lingering | bool
 
 # ---- Container storage relocated to /mnt/data ----
@@ -95,25 +56,15 @@
 
 - name: Ensure podman storage directory for vm_owner exists
   ansible.builtin.file:
-    path: "{{ app_podman_storage_base }}/{{ vm_owner[0] }}/storage"
+    path: "{{ app_podman_storage_base }}/{{ vm_owner_name }}/storage"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_podman_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0700"
-
-- name: List current SELinux file contexts
-  ansible.builtin.command:
-    cmd: semanage fcontext -l
-  register: app_podman_fcontext_list
-  changed_when: false
-  failed_when: false
 
 - name: Add SELinux fcontext for podman storage base
   ansible.builtin.command:
     cmd: "semanage fcontext -a -t container_var_lib_t '{{ app_podman_storage_base }}(/.*)?'"
-  when:
-    - app_podman_fcontext_list.rc == 0
-    - app_podman_storage_base ~ '(/.*)?' not in app_podman_fcontext_list.stdout
   register: app_podman_fcontext_added
   changed_when: app_podman_fcontext_added.rc == 0
   failed_when:
@@ -126,6 +77,7 @@
   register: app_podman_restorecon
   changed_when: app_podman_restorecon.stdout | length > 0
   failed_when: false
+  when: app_podman_fcontext_added.changed
 
 # ---- storage.conf (root + vm_owner) ----
 
@@ -154,22 +106,22 @@
 
 - name: Ensure ~vm_owner/.config/containers exists
   ansible.builtin.file:
-    path: "{{ app_podman_user_home }}/.config/containers"
+    path: "{{ vm_owner_home }}/.config/containers"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_podman_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
 
 - name: Write rootless storage.conf for vm_owner
   ansible.builtin.copy:
-    dest: "{{ app_podman_user_home }}/.config/containers/storage.conf"
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_podman_user_group }}"
+    dest: "{{ vm_owner_home }}/.config/containers/storage.conf"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0644"
     content: |
       [storage]
       driver = "{{ app_podman_storage_driver }}"
-      graphroot = "{{ app_podman_storage_base }}/{{ vm_owner[0] }}/storage"
+      graphroot = "{{ app_podman_storage_base }}/{{ vm_owner_name }}/storage"
 
       [storage.options]
       mount_program = "{{ app_podman_storage_mount_program }}"
@@ -201,6 +153,32 @@
       location = "{{ app_podman_harbor_host }}"
       {% endif %}
 
+# ---- short-name aliases (drop-in; OS default removed for offline hosts) ----
+
+- name: Ensure /etc/containers/registries.conf.d exists
+  ansible.builtin.file:
+    path: /etc/containers/registries.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: app_podman_harbor_host | length > 0
+
+- name: Remove OS-default shortnames drop-in (points to docker.io, unreachable offline)
+  ansible.builtin.file:
+    path: /etc/containers/registries.conf.d/000-shortnames.conf
+    state: absent
+  when: app_podman_harbor_host | length > 0
+
+- name: Write devmachine short-name aliases drop-in
+  ansible.builtin.template:
+    src: shortnames.conf.j2
+    dest: /etc/containers/registries.conf.d/99-devmachine-shortnames.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: app_podman_harbor_host | length > 0
+
 # ---- auth.json from vault (root + vm_owner) ----
 
 - name: Stat podman auth vault file on controller
@@ -210,6 +188,26 @@
   delegate_to: localhost
   become: false
   run_once: true
+
+- name: Read podman auth vault file header on controller
+  ansible.builtin.command:
+    cmd: "head -c 14 {{ app_podman_auth_json_vault_file }}"
+  register: app_podman_auth_vault_header
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when: app_podman_auth_vault_stat.stat.exists
+
+- name: Assert podman auth vault file is ansible-vault encrypted
+  ansible.builtin.assert:
+    that:
+      - app_podman_auth_vault_header.stdout.startswith('$ANSIBLE_VAULT;')
+    fail_msg: >-
+      {{ app_podman_auth_json_vault_file }} is not ansible-vault encrypted
+      (header does not start with '$ANSIBLE_VAULT;'). Refusing to load potential
+      cleartext credentials. Encrypt the file via `ansible-vault encrypt <path>`.
+  when: app_podman_auth_vault_stat.stat.exists
 
 - name: Load podman auth.json from vault file
   ansible.builtin.include_vars:
@@ -250,9 +248,9 @@
 - name: Deploy podman auth.json for vm_owner
   ansible.builtin.copy:
     content: "{{ app_podman_auth_json | to_nice_json }}\n"
-    dest: "{{ app_podman_user_home }}/.config/containers/auth.json"
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_podman_user_group }}"
+    dest: "{{ vm_owner_home }}/.config/containers/auth.json"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0600"
   when:
     - app_podman_auth_vault_stat.stat.exists
@@ -265,10 +263,10 @@
   ansible.builtin.command:
     cmd: podman info
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   environment:
-    HOME: "{{ app_podman_user_home }}"
-    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts.getent_passwd[vm_owner[0]][1] }}"
+    HOME: "{{ vm_owner_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ vm_owner_uid }}"
   register: app_podman_info_check
   changed_when: false
   failed_when: false
@@ -279,6 +277,6 @@
     that:
       - app_podman_info_check.rc == 0
     fail_msg: >-
-      podman info failed for {{ vm_owner[0] }}.
+      podman info failed for {{ vm_owner_name }}.
       stderr={{ app_podman_info_check.stderr | default('') | trim }}
   when: app_podman_verify_rootless | bool

@@ -1,6 +1,5 @@
 ---
-ide_vscode_rpm: code-1.120.0-1778619100.el8.x86_64.rpm
-ide_vscode_sha256: ""
-ide_vscode_package_dir: /opt/devmachine/packages
-ide_vscode_plugins_subdir: plugins
-vm_owner: []
+app_vscode_rpm: code-1.120.0-1778619100.el8.x86_64.rpm
+app_vscode_sha256: ""
+app_vscode_package_dir: /opt/devmachine/packages
+app_vscode_plugins_subdir: plugins

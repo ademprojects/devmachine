@@ -1,26 +1,29 @@
 ---
-xrdp_packages:
+common_xrdp_packages:
   - xrdp
   - xrdp-selinux
   - xorgxrdp
-xrdp_xfce_packages:
+common_xrdp_xfce_packages:
   - xfce4-session
   - xfdesktop
   - xfwm4
   - xfce4-panel
   - xfce4-terminal
   - Thunar
-xrdp_service_name: xrdp
-xrdp_firewall_port: 3389
-xrdp_open_firewall: true
-xrdp_xsession_command: /usr/bin/xfce4-session
-xrdp_skel_enabled: true
-xrdp_selinux_restorecon: true
+common_xrdp_service_name: xrdp
+common_xrdp_firewall_port: 3389
+common_xrdp_open_firewall: true
+common_xrdp_xsession_command: /usr/bin/xfce4-session
+common_xrdp_skel_enabled: true
+common_xrdp_selinux_restorecon: true
 
-xrdp_xrdp_ini_entries:
+common_xrdp_ini_entries:
   - section: Globals
     option: security_layer
-    value: negotiate
+    value: tls
+  - section: Globals
+    option: tls_min_version
+    value: "1.2"
   - section: Globals
     option: tcp_nodelay
     value: "true"
@@ -40,9 +43,7 @@ xrdp_xrdp_ini_entries:
     option: max_bpp
     value: "24"
 
-xrdp_sesman_ini_entries:
+common_xrdp_sesman_ini_entries:
   - section: Security
     option: AllowRootLogin
     value: "false"
-
-vm_owner: []

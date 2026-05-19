@@ -1,13 +1,4 @@
 ---
-- name: Validate vm_owner contains exactly one user
-  ansible.builtin.assert:
-    that:
-      - vm_owner is iterable
-      - vm_owner is not string
-      - vm_owner | length == 1
-      - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
-
 - name: Validate repo entries have required keys
   ansible.builtin.assert:
     that:
@@ -39,42 +30,12 @@
       - openssh-clients
     state: present
 
-- name: Read passwd entry for vm_owner
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ vm_owner[0] }}"
-
-- name: Read group entries
-  ansible.builtin.getent:
-    database: group
-
-- name: Resolve target user home directory
-  ansible.builtin.set_fact:
-    app_git_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
-
-- name: Resolve target user primary group
-  ansible.builtin.set_fact:
-    app_git_user_group: >-
-      {{
-        ansible_facts.getent_group
-        | dict2items
-        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
-        | map(attribute='key')
-        | first
-      }}
-
-- name: Ensure target user primary group was resolved
-  ansible.builtin.assert:
-    that:
-      - app_git_user_group | length > 0
-    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
-
 - name: Ensure ~/.ssh exists for vm_owner
   ansible.builtin.file:
-    path: "{{ app_git_user_home }}/.ssh"
+    path: "{{ vm_owner_home }}/.ssh"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_git_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0700"
 
 - name: Validate every configured git host has at least one fingerprint
@@ -118,12 +79,12 @@
 
 - name: Pin verified host keys in vm_owner known_hosts
   ansible.builtin.lineinfile:
-    path: "{{ app_git_user_home }}/.ssh/known_hosts"
+    path: "{{ vm_owner_home }}/.ssh/known_hosts"
     line: "{{ line }}"
     regexp: "^{{ (line.split(' ')[0] ~ ' ' ~ line.split(' ')[1]) | regex_escape }} "
     create: true
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_git_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0600"
   loop: "{{ app_git_verified_hosts.results | map(attribute='stdout_lines') | flatten | list }}"
   loop_control:
@@ -135,7 +96,7 @@
     scope: global
     value: "{{ app_git_user_name }}"
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   when: app_git_user_name | length > 0
 
 - name: Configure git user.email for vm_owner
@@ -144,7 +105,7 @@
     scope: global
     value: "{{ app_git_user_email }}"
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   when: app_git_user_email | length > 0
 
 - name: Apply git global config defaults for vm_owner
@@ -153,20 +114,20 @@
     scope: global
     value: "{{ item.value }}"
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   loop: "{{ app_git_global_config | dict2items }}"
   loop_control:
     label: "{{ item.key }}={{ item.value }}"
 
 - name: Stat vm_owner SSH key
   ansible.builtin.stat:
-    path: "{{ app_git_user_home }}/.ssh/{{ app_git_user_key_filename }}"
+    path: "{{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }}"
   register: app_git_user_key_stat
 
 - name: Report missing SSH key (clone tasks will be skipped)
   ansible.builtin.debug:
     msg: >-
-      ~/.ssh/{{ app_git_user_key_filename }} not present for {{ vm_owner[0] }};
+      ~/.ssh/{{ app_git_user_key_filename }} not present for {{ vm_owner_name }};
       skipping {{ app_git_repos | length }} repo clone(s). Drop the key into place
       and re-run the playbook to pick them up.
   when:
@@ -177,8 +138,8 @@
   ansible.builtin.file:
     path: "{{ item.target | dirname }}"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_git_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
   loop: "{{ app_git_repos }}"
   loop_control:
@@ -194,10 +155,10 @@
     update: false
     accept_hostkey: false
   become: true
-  become_user: "{{ vm_owner[0] }}"
+  become_user: "{{ vm_owner_name }}"
   environment:
-    HOME: "{{ app_git_user_home }}"
-    GIT_SSH_COMMAND: "ssh -i {{ app_git_user_home }}/.ssh/{{ app_git_user_key_filename }} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+    HOME: "{{ vm_owner_home }}"
+    GIT_SSH_COMMAND: "ssh -i {{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
   loop: "{{ app_git_repos }}"
   loop_control:
     label: "{{ item.target }}"

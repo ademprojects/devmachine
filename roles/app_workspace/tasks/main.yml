@@ -1,54 +1,31 @@
 ---
-- name: Validate vm_owner contains exactly one user
-  ansible.builtin.assert:
-    that:
-      - vm_owner is iterable
-      - vm_owner is not string
-      - vm_owner | length == 1
-      - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
-
-- name: Read passwd entry for vm_owner
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ vm_owner[0] }}"
-
-- name: Read group entries
-  ansible.builtin.getent:
-    database: group
-
-- name: Resolve target user home directory
-  ansible.builtin.set_fact:
-    app_workspace_user_home: "{{ ansible_facts.getent_passwd[vm_owner[0]][4] }}"
-
-- name: Resolve target user primary group
-  ansible.builtin.set_fact:
-    app_workspace_user_group: >-
-      {{
-        ansible_facts.getent_group
-        | dict2items
-        | selectattr('value.1', 'equalto', ansible_facts.getent_passwd[vm_owner[0]][2])
-        | map(attribute='key')
-        | first
-      }}
-
-- name: Ensure target user primary group was resolved
-  ansible.builtin.assert:
-    that:
-      - app_workspace_user_group | length > 0
-    fail_msg: "Unable to resolve primary group for vm_owner {{ vm_owner[0] }}."
-
 - name: Ensure workspace directory exists
   ansible.builtin.file:
     path: "{{ app_workspace_root }}"
     state: directory
-    owner: "{{ vm_owner[0] }}"
-    group: "{{ app_workspace_user_group }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
+
+- name: Stat existing workspace symlink target
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/{{ app_workspace_link_name }}"
+  register: app_workspace_existing_link
+
+- name: Refuse to clobber an existing real directory at the symlink path
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/{{ app_workspace_link_name }} exists as a directory.
+      Move its contents to {{ app_workspace_root }} manually and remove the directory,
+      then re-run the playbook. The role will not silently replace a real directory.
+  when:
+    - app_workspace_existing_link.stat.exists
+    - app_workspace_existing_link.stat.isdir
+    - not app_workspace_existing_link.stat.islnk
 
 - name: Ensure workspace symlink in vm_owner home
   ansible.builtin.file:
     src: "{{ app_workspace_root }}"
-    dest: "{{ app_workspace_user_home }}/{{ app_workspace_link_name }}"
+    dest: "{{ vm_owner_home }}/{{ app_workspace_link_name }}"
     state: link
     force: true

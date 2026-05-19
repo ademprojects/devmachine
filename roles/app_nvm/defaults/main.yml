@@ -2,10 +2,13 @@
 app_nvm_version: "0.40.4"
 app_nvm_archive_url: "{{ devmachine_nexus_base_url }}/raw/nvm/nvm-{{ app_nvm_version }}.tar.gz"
 app_nvm_install_subdir: .nvm
+# nvm lives on the data disk (installed Node versions + global npm modules can grow).
+# A symlink {{ vm_owner_home }}/.nvm → app_nvm_install_dir keeps tooling that
+# assumes ~/.nvm (incl. profile.d's $HOME/.nvm check) working transparently.
+app_nvm_install_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/nvm/{{ vm_owner_name }}"
 app_nvm_nodejs_mirror_url: "{{ devmachine_nexus_base_url }}/nodejs-dist/"
 app_nvm_profile_path: /etc/profile.d/app-nvm.sh
 app_nvm_node_version: "v24.15.0"
 app_nvm_set_default: true
 app_nvm_proxy_url: "{{ devmachine_proxy_url }}"
 app_nvm_npm_registry_url: "{{ devmachine_npm_registry_url }}"
-vm_owner: []

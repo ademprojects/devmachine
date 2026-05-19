@@ -1,0 +1,16 @@
+---
+profile: moderate
+
+exclude_paths:
+  - .ansible/
+  - .git/
+  - roles/*/files/
+  - tools/
+
+skip_list:
+  # Cross-role globals (vm_owner, devmachine_*) are intentional play-level
+  # variables, not role-local; the no-role-prefix rule doesn't apply.
+  - var-naming[no-role-prefix]
+
+warn_list:
+  - experimental

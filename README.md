@@ -110,7 +110,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 
 `app_workspace`-Rolle:
 
-- `app_workspace_root` (Default `{{ storage_mount_point }}/work`, also `/mnt/data/work`) — Verzeichnis
+- `app_workspace_root` (Default `{{ common_storage_mount_point }}/work`, also `/mnt/data/work`) — Verzeichnis
   unter dem Daten-Mount für alle Projekte des Users.
 - `app_workspace_link_name` (Default `work`) — Name des Symlinks im Home-Verzeichnis.
 
@@ -121,21 +121,21 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 
 `app_vscode`-Rolle:
 
-- `ide_vscode_rpm` — Dateiname des VS Code RPMs in `files/`.
-- `ide_vscode_sha256` — optionale SHA256-Prüfung des RPMs.
-- `ide_vscode_package_dir` — Zielverzeichnis auf dem Host (Default `/opt/devmachine/packages`).
-- `ide_vscode_plugins_subdir` — Unterverzeichnis unter `files/` für VSIX-Plugins (Default `plugins`).
+- `app_vscode_rpm` — Dateiname des VS Code RPMs in `files/`.
+- `app_vscode_sha256` — optionale SHA256-Prüfung des RPMs.
+- `app_vscode_package_dir` — Zielverzeichnis auf dem Host (Default `/opt/devmachine/packages`).
+- `app_vscode_plugins_subdir` — Unterverzeichnis unter `files/` für VSIX-Plugins (Default `plugins`).
   Alle `*.vsix` darin werden automatisch erkannt, auf den Host kopiert und für `vm_owner[0]`
   installiert. Drop-File → nächster Lauf zieht es hoch.
 
 `app_intellij`-Rolle:
 
-- `ide_intellij_archive` — Dateiname des IntelliJ-Tarballs in `files/`.
-- `ide_intellij_sha256` — optionale SHA256-Prüfung des Tarballs.
-- `ide_intellij_install_dir` — Basis für die Extraktion (Default `/opt/jetbrains`).
-- `ide_intellij_symlink` — Symlink zum `idea`-Launcher.
-- `ide_intellij_package_dir` — Staging-Ort des Tarballs auf dem Host.
-- `ide_intellij_plugins_subdir` — Unterverzeichnis unter `files/` für Plugins (Default `plugins`).
+- `app_intellij_archive` — Dateiname des IntelliJ-Tarballs in `files/`.
+- `app_intellij_sha256` — optionale SHA256-Prüfung des Tarballs.
+- `app_intellij_install_dir` — Basis für die Extraktion (Default `/opt/jetbrains`).
+- `app_intellij_symlink` — Symlink zum `idea`-Launcher.
+- `app_intellij_package_dir` — Staging-Ort des Tarballs auf dem Host.
+- `app_intellij_plugins_subdir` — Unterverzeichnis unter `files/` für Plugins (Default `plugins`).
   Alle `*.zip` darin werden in `<INSTALL>/plugins/` entpackt, alle `*.jar` direkt dort abgelegt.
   Drop-File → nächster Lauf zieht es hoch. **Achtung:** bei IntelliJ-Update wird das alte
   `idea-*`-Dir gewipt, Plugins werden im selben Lauf neu installiert.
@@ -307,27 +307,27 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 
 `common_xrdp`-Rolle:
 
-- `xrdp_packages`
-- `xrdp_xfce_packages`
-- `xrdp_service_name`
-- `xrdp_firewall_port`
-- `xrdp_open_firewall`
-- `xrdp_xsession_command`
-- `xrdp_skel_enabled`
-- `xrdp_selinux_restorecon`
-- `xrdp_xrdp_ini_entries`
-- `xrdp_sesman_ini_entries`
+- `common_xrdp_packages`
+- `common_xrdp_xfce_packages`
+- `common_xrdp_service_name`
+- `common_xrdp_firewall_port`
+- `common_xrdp_open_firewall`
+- `common_xrdp_xsession_command`
+- `common_xrdp_skel_enabled`
+- `common_xrdp_selinux_restorecon`
+- `common_xrdp_ini_entries`
+- `common_xrdp_sesman_ini_entries`
 
 `common_storage`-Rolle:
 
-- `storage_setup_enabled`
-- `storage_device`
-- `storage_vg_name`
-- `storage_lv_name`
-- `storage_lv_size`
-- `storage_fs_type`
-- `storage_mount_point`
-- `storage_mount_options`
+- `common_storage_setup_enabled`
+- `common_storage_device`
+- `common_storage_vg_name`
+- `common_storage_lv_name`
+- `common_storage_lv_size`
+- `common_storage_fs_type`
+- `common_storage_mount_point`
+- `common_storage_mount_options`
 
 Übergreifend:
 
@@ -427,16 +427,16 @@ xrdp / XFCE:
 - Rolle `common_xrdp` installiert XFCE + xrdp, aktiviert den Service und legt für `vm_owner[0]`
   `~/.xsession` **und** `~/.Xclients` an, beide mit `exec xfce4-session`.
 - `/etc/skel/.xsession` und `/etc/skel/.Xclients` werden als Defaults für zukünftig angelegte
-  User gesetzt (abschaltbar via `xrdp_skel_enabled: false`).
+  User gesetzt (abschaltbar via `common_xrdp_skel_enabled: false`).
 - `/etc/xrdp/xrdp.ini` und `/etc/xrdp/sesman.ini` werden via `ini_file` punktuell angepasst
-  (`xrdp_xrdp_ini_entries` / `xrdp_sesman_ini_entries`). Defaults:
+  (`common_xrdp_ini_entries` / `common_xrdp_sesman_ini_entries`). Defaults:
   - `[Globals] security_layer=negotiate`
   - Perf-Tuning für schwache Netze: `tcp_nodelay=true`, `tcp_keepalive=true`,
     `bitmap_compression=true`, `bulk_compression=true`, `new_cursors=true`, `max_bpp=24`
   - `[Security] AllowRootLogin=false`
   - Bei Änderung wird der `xrdp`-Service via Handler neu gestartet.
 - SELinux: das `xrdp-selinux`-Paket bringt die Policy mit; zusätzlich wird `restorecon -RvF`
-  auf `/etc/xrdp` und die xrdp-Binaries angewendet (abschaltbar via `xrdp_selinux_restorecon: false`).
+  auf `/etc/xrdp` und die xrdp-Binaries angewendet (abschaltbar via `common_xrdp_selinux_restorecon: false`).
 - Der xrdp-Login geht über PAM, daher benötigt `vm_owner[0]` ein gesetztes Linux-Passwort
   (wird **nicht** durch die Rolle gesetzt).
 - Falls firewalld aktiv ist, öffnet die Rolle TCP 3389 permanent und lädt firewalld neu.
@@ -447,8 +447,8 @@ xrdp / XFCE:
 Storage / Workspace-Mount:
 
 - Optionale Rolle `common_storage` legt einen LVM-Stack (PV → VG → LV → XFS) auf einer leeren Disk an
-  und mountet sie unter `storage_mount_point` (Default `/mnt/data`).
-- Aktivierung via `storage_setup_enabled: true`. Default-Device ist `/dev/sdb`.
+  und mountet sie unter `common_storage_mount_point` (Default `/mnt/data`).
+- Aktivierung via `common_storage_setup_enabled: true`. Default-Device ist `/dev/sdb`.
 - `vm_owner` muss als Liste mit genau einem Eintrag gesetzt sein (z. B. `vm_owner: ['huhu']`).
   Der Mountpoint gehört diesem User; die primäre Gruppe wird automatisch aus passwd/group aufgelöst.
 - Die Rolle bricht ab, wenn das Device bereits gemountet ist, die Root-Partition trägt oder

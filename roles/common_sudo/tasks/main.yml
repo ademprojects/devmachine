@@ -1,17 +1,8 @@
 ---
-- name: Validate vm_owner contains exactly one user
-  ansible.builtin.assert:
-    that:
-      - vm_owner is iterable
-      - vm_owner is not string
-      - vm_owner | length == 1
-      - vm_owner[0] | length > 0
-    fail_msg: "vm_owner must be a list with exactly one user name."
-
 - name: Configure passwordless sudo for vm_owner
   ansible.builtin.copy:
-    dest: "/etc/sudoers.d/{{ vm_owner[0] }}"
-    content: "{{ vm_owner[0] }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "/etc/sudoers.d/{{ vm_owner_name }}"
+    content: "{{ vm_owner_name }} ALL=(ALL) NOPASSWD:ALL\n"
     owner: root
     group: root
     mode: "0440"
