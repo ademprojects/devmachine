@@ -38,6 +38,48 @@
     group: "{{ vm_owner_group }}"
     mode: "0700"
 
+- name: Stat user's passphrase-encrypted private key on controller
+  ansible.builtin.stat:
+    path: "{{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }}"
+  register: app_git_user_key_src_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Stat user's public key on controller
+  ansible.builtin.stat:
+    path: "{{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }}.pub"
+  register: app_git_user_pubkey_src_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Deploy passphrase-encrypted private SSH key for vm_owner
+  ansible.builtin.copy:
+    src: "{{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }}"
+    dest: "{{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0600"
+  when: app_git_user_key_src_stat.stat.exists
+  no_log: true
+
+- name: Deploy public SSH key for vm_owner
+  ansible.builtin.copy:
+    src: "{{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }}.pub"
+    dest: "{{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }}.pub"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"
+  when: app_git_user_pubkey_src_stat.stat.exists
+
+- name: Report missing user SSH key source
+  ansible.builtin.debug:
+    msg: >-
+      No SSH key found at {{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }};
+      {{ vm_owner_name }} needs to provide one manually after first login.
+  when: not app_git_user_key_src_stat.stat.exists
+
 - name: Validate every configured git host has at least one fingerprint
   ansible.builtin.assert:
     that:
@@ -158,7 +200,7 @@
   become_user: "{{ vm_owner_name }}"
   environment:
     HOME: "{{ vm_owner_home }}"
-    GIT_SSH_COMMAND: "ssh -i {{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+    GIT_SSH_COMMAND: "ssh -i {{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes"
   loop: "{{ app_git_repos }}"
   loop_control:
     label: "{{ item.target }}"

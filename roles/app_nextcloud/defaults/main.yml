@@ -1,0 +1,13 @@
+---
+# AppImage-based install — drop the latest Nextcloud-*-x86_64.AppImage into
+# roles/app_nextcloud/files/ (use tools/download-tools.sh on the controller).
+app_nextcloud_install_dir: /opt/nextcloud
+app_nextcloud_symlink: /usr/local/bin/nextcloud
+app_nextcloud_desktop_entry: /usr/share/applications/nextcloud.desktop
+# Sync folder root on the data disk; created with vm_owner ownership.
+# Devs pick this in the GUI wizard on first launch (Server URL → /mnt/data/nc).
+app_nextcloud_sync_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/nc"
+# AppImages need libfuse2 to run on RHEL 9.
+app_nextcloud_runtime_packages:
+  - fuse
+  - fuse-libs

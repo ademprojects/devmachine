@@ -1,0 +1,9 @@
+---
+# AppImage-based install — drop the latest KeePassXC-*-x86_64.AppImage into
+# roles/app_keepassxc/files/ (use tools/download-tools.sh on the controller).
+app_keepassxc_install_dir: /opt/keepassxc
+app_keepassxc_symlink: /usr/local/bin/keepassxc
+app_keepassxc_desktop_entry: /usr/share/applications/keepassxc.desktop
+app_keepassxc_runtime_packages:
+  - fuse
+  - fuse-libs

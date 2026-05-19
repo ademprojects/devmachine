@@ -1,0 +1,62 @@
+---
+- name: Install gnome-keyring + seahorse + supporting libs
+  ansible.builtin.dnf:
+    name: "{{ app_keyring_packages }}"
+    state: present
+
+- name: Wire pam_gnome_keyring into auth stack (captures login password)
+  community.general.pamd:
+    name: "{{ item }}"
+    type: auth
+    control: include
+    module_path: password-auth
+    new_type: auth
+    new_control: optional
+    new_module_path: pam_gnome_keyring.so
+    state: after
+  loop: "{{ app_keyring_pam_targets }}"
+
+- name: Wire pam_gnome_keyring into session stack (auto-starts daemon)
+  community.general.pamd:
+    name: "{{ item }}"
+    type: session
+    control: include
+    module_path: password-auth
+    new_type: session
+    new_control: optional
+    new_module_path: pam_gnome_keyring.so
+    module_arguments: auto_start
+    state: after
+  loop: "{{ app_keyring_pam_targets }}"
+
+- name: Export SSH_AUTH_SOCK from keyring daemon for all login shells
+  ansible.builtin.copy:
+    dest: "{{ app_keyring_profile_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # gnome-keyring's ssh-agent socket; unlocked at login by pam_gnome_keyring
+      if [ -n "$XDG_RUNTIME_DIR" ] && [ -S "$XDG_RUNTIME_DIR/keyring/ssh" ]; then
+        export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/keyring/ssh"
+      fi
+
+- name: Ensure ~/.ssh exists for vm_owner (created by app_git on first run)
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/.ssh"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0700"
+
+- name: Configure ~/.ssh/config to auto-add unlocked keys to the agent
+  ansible.builtin.blockinfile:
+    path: "{{ vm_owner_home }}/.ssh/config"
+    create: true
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0600"
+    marker: "# {mark} ANSIBLE MANAGED — app_keyring"
+    block: |
+      Host *
+          AddKeysToAgent yes

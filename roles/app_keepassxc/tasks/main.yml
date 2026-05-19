@@ -1,0 +1,72 @@
+---
+- name: Discover KeePassXC AppImage in role files
+  ansible.builtin.set_fact:
+    app_keepassxc_appimage_files: >-
+      {{
+        query('fileglob', role_path ~ '/files/KeePassXC-*-x86_64.AppImage')
+        | map('basename')
+        | sort
+      }}
+
+- name: Fail when no KeePassXC AppImage is present in role files
+  ansible.builtin.fail:
+    msg: >-
+      No KeePassXC AppImage found in roles/app_keepassxc/files/.
+      Run `tools/download-tools.sh` on the controller to fetch the latest one.
+  when: app_keepassxc_appimage_files | length == 0
+  run_once: true
+
+- name: Fail when more than one KeePassXC AppImage is present
+  ansible.builtin.fail:
+    msg: >-
+      Multiple KeePassXC AppImages found in roles/app_keepassxc/files/
+      ({{ app_keepassxc_appimage_files | join(', ') }}). Keep only one.
+  when: app_keepassxc_appimage_files | length > 1
+  run_once: true
+
+- name: Install AppImage runtime dependencies (FUSE2)
+  ansible.builtin.dnf:
+    name: "{{ app_keepassxc_runtime_packages }}"
+    state: present
+
+- name: Ensure KeePassXC install directory exists
+  ansible.builtin.file:
+    path: "{{ app_keepassxc_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy KeePassXC AppImage to remote host
+  ansible.builtin.copy:
+    src: "{{ app_keepassxc_appimage_files[0] }}"
+    dest: "{{ app_keepassxc_install_dir }}/{{ app_keepassxc_appimage_files[0] }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Symlink KeePassXC launcher
+  ansible.builtin.file:
+    src: "{{ app_keepassxc_install_dir }}/{{ app_keepassxc_appimage_files[0] }}"
+    dest: "{{ app_keepassxc_symlink }}"
+    state: link
+    force: true
+
+- name: Write KeePassXC desktop entry
+  ansible.builtin.copy:
+    dest: "{{ app_keepassxc_desktop_entry }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=KeePassXC
+      GenericName=Password Manager
+      Comment=Cross-platform community-driven port of the Windows application "Keepass Password Safe"
+      Exec={{ app_keepassxc_symlink }} %f
+      Icon=keepassxc
+      Terminal=false
+      Categories=Utility;Security;Qt;
+      MimeType=application/x-keepass2;
+      StartupWMClass=keepassxc

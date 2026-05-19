@@ -1,0 +1,79 @@
+---
+- name: Discover Nextcloud AppImage in role files
+  ansible.builtin.set_fact:
+    app_nextcloud_appimage_files: >-
+      {{
+        query('fileglob', role_path ~ '/files/Nextcloud-*-x86_64.AppImage')
+        | map('basename')
+        | sort
+      }}
+
+- name: Fail when no Nextcloud AppImage is present in role files
+  ansible.builtin.fail:
+    msg: >-
+      No Nextcloud AppImage found in roles/app_nextcloud/files/.
+      Run `tools/download-tools.sh` on the controller to fetch the latest one.
+  when: app_nextcloud_appimage_files | length == 0
+  run_once: true
+
+- name: Fail when more than one Nextcloud AppImage is present
+  ansible.builtin.fail:
+    msg: >-
+      Multiple Nextcloud AppImages found in roles/app_nextcloud/files/
+      ({{ app_nextcloud_appimage_files | join(', ') }}). Keep only one.
+  when: app_nextcloud_appimage_files | length > 1
+  run_once: true
+
+- name: Install AppImage runtime dependencies (FUSE2)
+  ansible.builtin.dnf:
+    name: "{{ app_nextcloud_runtime_packages }}"
+    state: present
+
+- name: Ensure Nextcloud install directory exists
+  ansible.builtin.file:
+    path: "{{ app_nextcloud_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy Nextcloud AppImage to remote host
+  ansible.builtin.copy:
+    src: "{{ app_nextcloud_appimage_files[0] }}"
+    dest: "{{ app_nextcloud_install_dir }}/{{ app_nextcloud_appimage_files[0] }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Symlink Nextcloud launcher
+  ansible.builtin.file:
+    src: "{{ app_nextcloud_install_dir }}/{{ app_nextcloud_appimage_files[0] }}"
+    dest: "{{ app_nextcloud_symlink }}"
+    state: link
+    force: true
+
+- name: Write Nextcloud desktop entry
+  ansible.builtin.copy:
+    dest: "{{ app_nextcloud_desktop_entry }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Nextcloud
+      GenericName=File Sync Client
+      Comment=Nextcloud desktop sync client
+      Exec={{ app_nextcloud_symlink }} %U
+      Icon=nextcloud
+      Terminal=false
+      Categories=Network;FileTransfer;Utility;
+      StartupWMClass=Nextcloud
+
+- name: Ensure sync directory on data disk exists
+  ansible.builtin.file:
+    path: "{{ app_nextcloud_sync_dir }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0700"

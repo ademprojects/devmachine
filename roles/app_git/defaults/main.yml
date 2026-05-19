@@ -1,6 +1,11 @@
 ---
 app_git_target_root: /mnt/data
 app_git_user_key_filename: id_ed25519
+# Per-user SSH key source on the controller. The private key is expected to be
+# passphrase-encrypted (own security boundary). If both files are present they
+# get deployed to ~/.ssh/; missing files are silently skipped so the role works
+# even without configured keys.
+app_git_user_keys_source_dir: "{{ playbook_dir }}/../inventory/users/{{ vm_owner_name }}"
 app_git_user_name: ""
 app_git_user_email: ""
 app_git_global_config:

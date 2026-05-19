@@ -20,6 +20,8 @@
     - role: app_intellij
     - role: app_chrome
     - role: app_postman
+    - role: app_nextcloud
+    - role: app_keepassxc
     - role: common_xrdp
     - role: app_podman
     - role: app_java
@@ -27,3 +29,4 @@
     - role: app_nvm
     - role: app_maven
     - role: app_git
+    - role: app_keyring

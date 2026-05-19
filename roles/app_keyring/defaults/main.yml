@@ -1,0 +1,10 @@
+---
+app_keyring_packages:
+  - gnome-keyring
+  - seahorse
+  - libsecret
+  - gcr
+app_keyring_pam_targets:
+  - xrdp-sesman
+  - sshd
+app_keyring_profile_path: /etc/profile.d/app-keyring-ssh.sh
