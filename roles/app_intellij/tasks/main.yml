@@ -45,6 +45,19 @@
     state: directory
     mode: "0755"
 
+# Idempotency: look up the tarball's top-level directory (e.g.
+# idea-IU-262.5752.32) and use it as the unarchive `creates` guard so the
+# extract is a no-op once that dir is present. Old idea-* dirs that don't
+# match the current archive get wiped — current one is preserved.
+- name: Resolve IntelliJ tarball top-level directory name
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      tar -tzf {{ (app_intellij_package_dir ~ '/' ~ app_intellij_archive) | quote }} 2>/dev/null | head -1 | cut -d/ -f1
+    executable: /bin/bash
+  register: app_intellij_archive_topdir
+  changed_when: false
+
 - name: Find existing IntelliJ directories
   ansible.builtin.find:
     paths: "{{ app_intellij_install_dir }}"
@@ -53,18 +66,21 @@
     recurse: false
   register: app_intellij_existing_dirs
 
-- name: Remove existing IntelliJ directories
+- name: Remove stale IntelliJ directories (not matching the current archive)
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
   loop: "{{ app_intellij_existing_dirs.files }}"
-  when: app_intellij_existing_dirs.matched | int > 0
+  loop_control:
+    label: "{{ item.path }}"
+  when: (item.path | basename) != (app_intellij_archive_topdir.stdout | trim)
 
 - name: Extract IntelliJ archive
   ansible.builtin.unarchive:
     src: "{{ app_intellij_package_dir }}/{{ app_intellij_archive }}"
     dest: "{{ app_intellij_install_dir }}"
     remote_src: true
+    creates: "{{ app_intellij_install_dir }}/{{ app_intellij_archive_topdir.stdout | trim }}"
 
 - name: Find extracted IntelliJ directory
   ansible.builtin.find:

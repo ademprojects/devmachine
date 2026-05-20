@@ -27,9 +27,23 @@
       VS Code CLI ('code') is not available for user {{ app_vscode_target_user }}.
       Verify that the VS Code RPM was installed successfully.
 
+# `code --install-extension <vsix-path>` always reports "successfully installed"
+# (the "already installed" message only fires for marketplace IDs, not VSIX
+# paths), so we get false "changed" results on every re-run. Pre-fetch the
+# currently installed extensions and gate the install on a name miss.
+- name: List currently installed VS Code extensions for {{ app_vscode_target_user }}
+  ansible.builtin.command:
+    cmd: code --list-extensions
+  become: true
+  become_user: "{{ app_vscode_target_user }}"
+  environment:
+    HOME: "{{ app_vscode_target_user_home }}"
+  register: app_vscode_installed_extensions
+  changed_when: false
+
 - name: Install VS Code plugins for {{ app_vscode_target_user }}
   ansible.builtin.command:
-    cmd: "code --install-extension {{ app_vscode_package_dir }}/{{ app_vscode_plugins_subdir }}/{{ item }}"
+    cmd: "code --install-extension {{ app_vscode_package_dir }}/{{ app_vscode_plugins_subdir }}/{{ item }} --force"
   become: true
   become_user: "{{ app_vscode_target_user }}"
   environment:
@@ -37,5 +51,5 @@
   loop: "{{ app_vscode_plugin_files }}"
   loop_control:
     label: "{{ item }}"
-  register: app_vscode_install_result
-  changed_when: "'is already installed' not in (app_vscode_install_result.stdout | default(''))"
+  when: (item | regex_replace('\\.vsix$', '') | lower)
+    not in (app_vscode_installed_extensions.stdout_lines | map('lower') | list)
