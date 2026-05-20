@@ -99,9 +99,9 @@ for id in "${INTELLIJ_PLUGINS[@]}"; do
     url="${url}&build=${INTELLIJ_BUILD}"
   fi
   printf '  - plugin id %s\n' "$id"
-  saved=$(curl "${curl_opts[@]}" --remote-header-name --remote-name --output-dir "$INTELLIJ_DIR" \
+  saved=$(cd "$INTELLIJ_DIR" && curl "${curl_opts[@]}" --remote-header-name --remote-name \
     --write-out '%{filename_effective}' "$url")
-  assert_nonempty "$saved" "IntelliJ plugin id $id"
+  assert_nonempty "$INTELLIJ_DIR/$saved" "IntelliJ plugin id $id"
 done
 
 echo ""

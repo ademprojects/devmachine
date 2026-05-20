@@ -49,11 +49,11 @@ echo ">>> Cleaning previous Postman tarballs in $POSTMAN_DIR"
 find "$POSTMAN_DIR" -maxdepth 1 -name 'Postman-*.tar.gz' -delete 2>/dev/null || true
 
 echo ">>> Downloading latest Postman Linux x64 tarball"
-postman_saved=$(curl "${curl_opts[@]}" \
-  --remote-header-name --remote-name --output-dir "$POSTMAN_DIR" \
+postman_saved=$(cd "$POSTMAN_DIR" && curl "${curl_opts[@]}" \
+  --remote-header-name --remote-name \
   --write-out '%{filename_effective}' \
   https://dl.pstmn.io/download/latest/linux_64)
-assert_nonempty "$postman_saved" "Postman"
+assert_nonempty "$POSTMAN_DIR/$postman_saved" "Postman"
 
 # ---- Nextcloud desktop client ----------------------------------------------
 
