@@ -1,0 +1,65 @@
+#!/bin/bash
+# Ansible-managed (roles/app_git). Runs at first user login via autostart
+# to clone repositories from app_git_repos. Self-removes once every repo
+# is present. Uses the gnome-keyring ssh-agent for the SSH passphrase
+# (one askpass prompt the first time, then auto-unlocked at every login).
+
+set -uo pipefail
+
+LOG="${HOME}/.local/state/devmachine-clone-repos.log"
+AUTOSTART="${HOME}/.config/autostart/devmachine-clone-repos.desktop"
+SELF="$(readlink -f "$0")"
+KEY="${HOME}/.ssh/{{ vm_owner_ssh_keyfilename }}"
+
+mkdir -p "$(dirname "$LOG")"
+exec >>"$LOG" 2>&1
+
+echo
+echo "=== $(date -Is) clone run starting (pid $$) ==="
+
+if [ ! -r "$KEY" ]; then
+    echo "missing key $KEY — aborting"
+    exit 1
+fi
+
+# Force GUI askpass — autostart launches us without a controlling tty.
+export SSH_ASKPASS_REQUIRE=prefer
+
+# Pre-load the key so we get one askpass prompt instead of one per repo.
+ssh-add "$KEY" </dev/null || true
+
+export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+all_done=1
+failed=()
+{% for repo in app_git_repos %}
+target={{ repo.target | quote }}
+url={{ repo.repo | quote }}
+if [ -d "$target/.git" ]; then
+    echo "skip $target (already cloned)"
+else
+    mkdir -p "$(dirname "$target")"
+    if git clone "$url" "$target"; then
+        echo "cloned $url -> $target"
+    else
+        echo "FAILED $url -> $target"
+        failed+=("$target")
+        all_done=0
+    fi
+fi
+{% endfor %}
+
+if command -v notify-send >/dev/null 2>&1; then
+    if [ "$all_done" -eq 1 ]; then
+        notify-send "Devmachine" "All developer repositories cloned." || true
+    else
+        notify-send -u critical "Devmachine" \
+            "Some repo clones failed: ${failed[*]} (see $LOG)" || true
+    fi
+fi
+
+if [ "$all_done" -eq 1 ]; then
+    echo "all repos present — removing autostart + self"
+    rm -f "$AUTOSTART"
+    rm -f "$SELF"
+fi

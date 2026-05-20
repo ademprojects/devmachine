@@ -161,15 +161,18 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 `app_git`-Rolle:
 
 - `app_git_target_root` — Pflichtwurzel für alle Repo-Targets (Default `/mnt/data`).
-- `app_git_user_key_filename` — Name des erwarteten SSH-Keys unter `~vm_owner/.ssh/` (Default `id_ed25519`).
+- SSH-Key: wird von `app_keyring` aus `user_data[*].ssh_privkey` / `.ssh_pubkey` /
+  `.ssh_keyfilename` deployed (via `common_vm_owner_facts` als `vm_owner_ssh_*`
+  exponiert). Privater Key wird passphrase-encrypted erwartet; ist `ssh_privkey`
+  leer, wird auch das Clone-Autostart hier übersprungen.
 - `app_git_user_name` / `app_git_user_email` — Git-Identity für `vm_owner[0]` (`git config --global`).
   Wenn leer, werden die Tasks übersprungen.
 - `app_git_global_config` — Dict von zusätzlichen `git config --global`-Einträgen. Defaults:
   `init.defaultBranch=main`, `pull.rebase=false`, `fetch.prune=true`, `core.editor=vim`,
   `credential.helper=cache --timeout=14400`.
-- `app_git_hosts` — Liste der akzeptierten Git-Hosts als `{name, fingerprints}`-Dicts.
-  Die Rolle holt zur Laufzeit per `ssh-keyscan` die Host-Keys und nimmt nur die in `known_hosts`
-  auf, deren SHA256-Fingerprint in `fingerprints` steht. Bricht ab, wenn kein Key matcht.
+- Host-Keys: kein vorab-Pinning. Das Clone-Script nutzt `StrictHostKeyChecking=accept-new`,
+  d.h. neue Hosts werden beim ersten Clone in `~/.ssh/known_hosts` aufgenommen (TOFU);
+  ab dem zweiten Clone gilt strikte Prüfung gegen den Erst-Eintrag.
 - `app_git_repos` — Liste der zu klonenden Repos. Jeder Eintrag muss `repo` und `target` setzen,
   `target` muss unter `app_git_target_root` liegen. Beispiel:
 
@@ -180,6 +183,29 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
     - repo: git@github.com:org/service-b.git
       target: /mnt/data/work/git/service-b
   ```
+
+  Die Clones laufen **nicht** während des Ansible-Runs, sondern beim ersten
+  User-Login. Die Rolle deployed `~/.local/bin/devmachine-clone-repos.sh` plus
+  einen Autostart-Eintrag (`~/.config/autostart/devmachine-clone-repos.desktop`);
+  beim Login lädt das Script den passphrase-encrypted Key via `ssh-add` in den
+  gnome-keyring-Agent (eine GUI-Askpass-Abfrage), klont alle Repos und löscht
+  Autostart + sich selbst, sobald jedes `target` ein Git-Working-Tree ist.
+  Log: `~/.local/state/devmachine-clone-repos.log`.
+
+  **IDE-Bootstrap.** Zusätzlich werden zwei Dateien aus `app_git_repos`
+  abgeleitet (beide mit `force: false`, also nur Erstanlage — zum Refresh
+  einfach die Datei löschen und Playbook erneut laufen lassen):
+  - `~/work/devmachine.code-workspace` — VS-Code-Multi-Root-Workspace.
+  - `~/.config/JetBrains/<IntelliJIdeaVersion>/options/recentProjects.xml` —
+    füllt IntelliJs "Recent Projects". Die Version wird aus
+    `app_intellij_home/product-info.json` (`dataDirectoryName`) ermittelt;
+    keine manuelle Pflege nötig.
+
+  **Projekt-Gruppierung.** Teilen sich mehrere Einträge denselben
+  `dirname(target)`, wird dieser Parent als gemeinsamer Projekt-Root benutzt
+  (Beispiel: `work/git/app1/backend` + `work/git/app1/frontend` → IDEs öffnen
+  `work/git/app1` als Projekt mit `backend`/`frontend` als Subdirs). Standalone-Repos
+  bleiben eigene Projekte. Override via optionalem `project:` Feld pro Repo.
 
 `app_podman`-Rolle:
 
@@ -345,16 +371,19 @@ xrdp-`.xsession`, podman rootless, etc.) laufen für `vm_owner[0]`.
 
 Git-Workspace:
 
-- Rolle `app_git` legt `~/.ssh/` für `vm_owner[0]` an (Mode 0700). Host-Keys werden zur Laufzeit
-  per `ssh-keyscan` geholt und gegen die Fingerprints aus `app_git_hosts` verifiziert — nur
-  passende Keys landen in `known_hosts`. Kein TOFU, automatische Key-Rotation.
+- SSH-Key + `~/.ssh/`-Anlage liegen in `app_keyring`; `app_git` setzt nur git-Identity/Config
+  und deployed das Clone-Autostart-Script.
+- Host-Keys werden nicht vorab gepinnt — das Clone-Script nutzt `StrictHostKeyChecking=accept-new`
+  (TOFU beim ersten Connect, ab dem zweiten Clone strikt). Wer pinnen will, kann `~/.ssh/known_hosts`
+  selbst befüllen (z.B. per host_vars).
 - Repos werden über `app_git_repos` als Liste von `{repo, target}`-Dicts konfiguriert. `target`
   ist immer ein absoluter Pfad **unter `/mnt/data`** (oder `app_git_target_root`, falls überschrieben).
-- Geklont wird **nur dann**, wenn `~vm_owner/.ssh/id_ed25519` existiert. Fehlt der Key, gibt die
-  Rolle einen Hinweis aus und überspringt die Clone-Schritte — der Rest des Playbooks läuft durch.
-- Klon-Befehl: `become_user: vm_owner[0]`, `GIT_SSH_COMMAND` mit `-i ~/.ssh/id_ed25519`,
-  `IdentitiesOnly=yes`, `StrictHostKeyChecking=yes`. Kein Long-Lived-Deploy-Account im Playbook.
-- `update: false` — bereits geklonte Repos bleiben unangetastet, kein Auto-Pull.
+- Geklont wird beim ersten User-Login durch das Autostart-Script (nicht im Ansible-Run): es lädt
+  den Key via `ssh-add` in den gnome-keyring-Agent, klont alle Repos und löscht sich selbst, sobald
+  jedes `target/.git` existiert. Fehlt `ssh_privkey` in `user_data`, gibt die Rolle einen Hinweis
+  aus und das Autostart wird nicht deployed.
+- Klon-Befehl im Script: `GIT_SSH_COMMAND` mit `-i ~/.ssh/<keyfile>`, `IdentitiesOnly=yes`,
+  `StrictHostKeyChecking=accept-new`. Bereits geklonte Repos werden geskippt.
 
 pyenv + Python (rolle `app_pyenv`):
 

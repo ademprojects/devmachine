@@ -1,0 +1,39 @@
+{# Ansible-managed (roles/app_git). Pre-populates IntelliJ's Recent Projects
+   list with the inferred project roots from app_git_repos. Same grouping
+   heuristic as the VS Code workspace template: repos sharing a parent dir
+   collapse to that parent; explicit `project:` wins. Written with
+   force: false — IntelliJ updates this file at runtime; we only bootstrap. #}
+{% set parent_dirs = app_git_repos | map(attribute='target') | map('dirname') | list %}
+{% set ns = namespace(projects=[]) %}
+{% for repo in app_git_repos %}
+{%   set parent = repo.target | dirname %}
+{%   if repo.project is defined %}
+{%     set p = repo.project %}
+{%   elif (parent_dirs | select('equalto', parent) | list | length) > 1 %}
+{%     set p = parent %}
+{%   else %}
+{%     set p = repo.target %}
+{%   endif %}
+{%   if p not in ns.projects %}
+{%     set _ = ns.projects.append(p) %}
+{%   endif %}
+{% endfor %}
+<application>
+  <component name="RecentProjectsManager">
+    <option name="additionalInfo">
+      <map>
+{% for p in ns.projects %}
+        <entry key="{{ p }}">
+          <value>
+            <RecentProjectMetaInfo>
+              <option name="projectOpenTimestamp" value="{{ ansible_date_time.epoch }}000" />
+              <option name="buildTimestamp" value="{{ ansible_date_time.epoch }}000" />
+            </RecentProjectMetaInfo>
+          </value>
+        </entry>
+{% endfor %}
+      </map>
+    </option>
+    <option name="lastProjectLocation" value="{{ app_workspace_root | default(app_git_target_root + '/work') }}/git" />
+  </component>
+</application>

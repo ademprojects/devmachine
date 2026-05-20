@@ -134,3 +134,21 @@
   loop: "{{ app_intellij_plugin_files | select('match', '.*\\.jar$') | list }}"
   loop_control:
     label: "{{ item }}"
+
+# Expose IntelliJ's per-version config directory name (e.g. "IntelliJIdea2026.1")
+# so other roles can write into ~/.config/JetBrains/<name>/ without hard-coding
+# the version. The name comes from product-info.json's `dataDirectoryName`
+# field, which is the canonical source IntelliJ itself uses.
+- name: Read IntelliJ product-info.json
+  ansible.builtin.slurp:
+    src: "{{ app_intellij_home }}/product-info.json"
+  register: app_intellij_product_info_raw
+
+- name: Resolve IntelliJ data directory name
+  ansible.builtin.set_fact:
+    app_intellij_data_dir_name: >-
+      {{ (app_intellij_product_info_raw.content | b64decode | from_json).dataDirectoryName }}
+
+- name: Report resolved IntelliJ data directory name
+  ansible.builtin.debug:
+    msg: "IntelliJ per-user config dir: ~/.config/JetBrains/{{ app_intellij_data_dir_name }}/"

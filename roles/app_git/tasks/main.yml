@@ -30,108 +30,6 @@
       - openssh-clients
     state: present
 
-- name: Ensure ~/.ssh exists for vm_owner
-  ansible.builtin.file:
-    path: "{{ vm_owner_home }}/.ssh"
-    state: directory
-    owner: "{{ vm_owner_name }}"
-    group: "{{ vm_owner_group }}"
-    mode: "0700"
-
-- name: Stat user's passphrase-encrypted private key on controller
-  ansible.builtin.stat:
-    path: "{{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }}"
-  register: app_git_user_key_src_stat
-  delegate_to: localhost
-  become: false
-  run_once: true
-
-- name: Stat user's public key on controller
-  ansible.builtin.stat:
-    path: "{{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }}.pub"
-  register: app_git_user_pubkey_src_stat
-  delegate_to: localhost
-  become: false
-  run_once: true
-
-- name: Deploy passphrase-encrypted private SSH key for vm_owner
-  ansible.builtin.copy:
-    src: "{{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }}"
-    dest: "{{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }}"
-    owner: "{{ vm_owner_name }}"
-    group: "{{ vm_owner_group }}"
-    mode: "0600"
-  when: app_git_user_key_src_stat.stat.exists
-  no_log: true
-
-- name: Deploy public SSH key for vm_owner
-  ansible.builtin.copy:
-    src: "{{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }}.pub"
-    dest: "{{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }}.pub"
-    owner: "{{ vm_owner_name }}"
-    group: "{{ vm_owner_group }}"
-    mode: "0644"
-  when: app_git_user_pubkey_src_stat.stat.exists
-
-- name: Report missing user SSH key source
-  ansible.builtin.debug:
-    msg: >-
-      No SSH key found at {{ app_git_user_keys_source_dir }}/{{ app_git_user_key_filename }};
-      {{ vm_owner_name }} needs to provide one manually after first login.
-  when: not app_git_user_key_src_stat.stat.exists
-
-- name: Validate every configured git host has at least one fingerprint
-  ansible.builtin.assert:
-    that:
-      - item.name is defined
-      - item.name | length > 0
-      - item.fingerprints is defined
-      - item.fingerprints | length > 0
-    fail_msg: "app_git_hosts entry must define 'name' and a non-empty 'fingerprints' list: {{ item }}"
-  loop: "{{ app_git_hosts }}"
-  loop_control:
-    label: "{{ item.name | default('?') }}"
-
-- name: Scan and verify host keys against configured fingerprints
-  ansible.builtin.shell:
-    cmd: |
-      set -euo pipefail
-      scanned=$(mktemp)
-      verified=$(mktemp)
-      trap 'rm -f "$scanned" "$verified"' EXIT
-      ssh-keyscan -T 10 -t ed25519,ecdsa,rsa {{ item.name | quote }} > "$scanned" 2>/dev/null || true
-      while IFS= read -r line; do
-        [ -z "$line" ] && continue
-        case "$line" in '#'*) continue ;; esac
-        fp=$(printf '%s\n' "$line" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}') || continue
-        case " {{ item.fingerprints | join(' ') }} " in
-          *" $fp "*) printf '%s\n' "$line" >> "$verified" ;;
-        esac
-      done < "$scanned"
-      if [ ! -s "$verified" ]; then
-        echo "No host keys for {{ item.name }} matched the configured fingerprints" >&2
-        exit 1
-      fi
-      cat "$verified"
-  register: app_git_verified_hosts
-  changed_when: false
-  loop: "{{ app_git_hosts }}"
-  loop_control:
-    label: "{{ item.name }}"
-
-- name: Pin verified host keys in vm_owner known_hosts
-  ansible.builtin.lineinfile:
-    path: "{{ vm_owner_home }}/.ssh/known_hosts"
-    line: "{{ line }}"
-    regexp: "^{{ (line.split(' ')[0] ~ ' ' ~ line.split(' ')[1]) | regex_escape }} "
-    create: true
-    owner: "{{ vm_owner_name }}"
-    group: "{{ vm_owner_group }}"
-    mode: "0600"
-  loop: "{{ app_git_verified_hosts.results | map(attribute='stdout_lines') | flatten | list }}"
-  loop_control:
-    loop_var: line
-
 - name: Configure git user.name for vm_owner
   ansible.builtin.git_config:
     name: user.name
@@ -161,49 +59,100 @@
   loop_control:
     label: "{{ item.key }}={{ item.value }}"
 
-- name: Stat vm_owner SSH key
-  ansible.builtin.stat:
-    path: "{{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }}"
-  register: app_git_user_key_stat
-
-- name: Report missing SSH key (clone tasks will be skipped)
+- name: Report missing SSH key (clone autostart will not be deployed)
   ansible.builtin.debug:
     msg: >-
-      ~/.ssh/{{ app_git_user_key_filename }} not present for {{ vm_owner_name }};
-      skipping {{ app_git_repos | length }} repo clone(s). Drop the key into place
-      and re-run the playbook to pick them up.
+      No ssh_privkey configured for {{ vm_owner_name }};
+      skipping autostart for {{ app_git_repos | length }} repo clone(s).
+      Add ssh_privkey to user_data and re-run the playbook to pick them up.
   when:
     - app_git_repos | length > 0
-    - not app_git_user_key_stat.stat.exists
+    - vm_owner_ssh_privkey | length == 0
 
-- name: Ensure parent directory for each repo target exists
+# Repo clones happen at first user login (not during the Ansible run): the SSH
+# key is passphrase-encrypted, so we need gnome-keyring's ssh-agent to be
+# available — which only happens after pam_gnome_keyring unlocks the keyring at
+# login. We drop a script + autostart entry; the script self-removes once every
+# repo is present, so subsequent logins are a no-op.
+
+- name: Ensure ~/.local/bin exists for vm_owner
   ansible.builtin.file:
-    path: "{{ item.target | dirname }}"
+    path: "{{ vm_owner_home }}/.local/bin"
     state: directory
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "0755"
-  loop: "{{ app_git_repos }}"
-  loop_control:
-    label: "{{ item.target }}"
   when:
     - app_git_repos | length > 0
-    - app_git_user_key_stat.stat.exists
+    - vm_owner_ssh_privkey | length > 0
 
-- name: Clone configured repositories as vm_owner
-  ansible.builtin.git:
-    repo: "{{ item.repo }}"
-    dest: "{{ item.target }}"
-    update: false
-    accept_hostkey: false
-  become: true
-  become_user: "{{ vm_owner_name }}"
-  environment:
-    HOME: "{{ vm_owner_home }}"
-    GIT_SSH_COMMAND: "ssh -i {{ vm_owner_home }}/.ssh/{{ app_git_user_key_filename }} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes"
-  loop: "{{ app_git_repos }}"
-  loop_control:
-    label: "{{ item.target }}"
+- name: Ensure ~/.config/autostart exists for vm_owner
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/.config/autostart"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
   when:
     - app_git_repos | length > 0
-    - app_git_user_key_stat.stat.exists
+    - vm_owner_ssh_privkey | length > 0
+
+- name: Deploy clone-repos script for first-login autostart
+  ansible.builtin.template:
+    src: devmachine-clone-repos.sh.j2
+    dest: "{{ vm_owner_home }}/.local/bin/devmachine-clone-repos.sh"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+  when:
+    - app_git_repos | length > 0
+    - vm_owner_ssh_privkey | length > 0
+
+- name: Deploy autostart entry for clone-repos script
+  ansible.builtin.template:
+    src: devmachine-clone-repos.desktop.j2
+    dest: "{{ vm_owner_home }}/.config/autostart/devmachine-clone-repos.desktop"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"
+  when:
+    - app_git_repos | length > 0
+    - vm_owner_ssh_privkey | length > 0
+
+# IDE bootstrap files. Both rendered with force: false — Ansible only seeds them
+# on first deploy, IDEs (or the user) own them afterwards. To refresh after an
+# app_git_repos change, delete the file and re-run.
+
+- name: Deploy VS Code multi-root workspace file
+  ansible.builtin.template:
+    src: devmachine.code-workspace.j2
+    dest: "{{ app_workspace_root | default(app_git_target_root + '/work') }}/devmachine.code-workspace"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"
+    force: false
+  when:
+    - app_git_repos | length > 0
+
+- name: Ensure IntelliJ per-user options dir exists
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/.config/JetBrains/{{ app_intellij_data_dir_name }}/options"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0700"
+  when:
+    - app_git_repos | length > 0
+    - app_intellij_data_dir_name is defined
+
+- name: Pre-populate IntelliJ recent projects
+  ansible.builtin.template:
+    src: recentProjects.xml.j2
+    dest: "{{ vm_owner_home }}/.config/JetBrains/{{ app_intellij_data_dir_name }}/options/recentProjects.xml"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0600"
+    force: false
+  when:
+    - app_git_repos | length > 0
+    - app_intellij_data_dir_name is defined

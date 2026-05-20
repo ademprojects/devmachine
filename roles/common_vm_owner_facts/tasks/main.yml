@@ -66,3 +66,6 @@
   ansible.builtin.set_fact:
     vm_owner_email: "{{ _vm_owner_matches[0].email }}"
     vm_owner_fullname: "{{ _vm_owner_matches[0].fullname }}"
+    vm_owner_ssh_privkey: "{{ _vm_owner_matches[0].ssh_privkey }}"
+    vm_owner_ssh_pubkey: "{{ _vm_owner_matches[0].ssh_pubkey }}"
+    vm_owner_ssh_keyfilename: "{{ _vm_owner_matches[0].ssh_keyfilename }}"

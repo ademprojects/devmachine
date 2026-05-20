@@ -41,13 +41,39 @@
         export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/keyring/ssh"
       fi
 
-- name: Ensure ~/.ssh exists for vm_owner (created by app_git on first run)
+- name: Ensure ~/.ssh exists for vm_owner
   ansible.builtin.file:
     path: "{{ vm_owner_home }}/.ssh"
     state: directory
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "0700"
+
+- name: Deploy passphrase-encrypted private SSH key for vm_owner
+  ansible.builtin.copy:
+    content: "{{ vm_owner_ssh_privkey }}"
+    dest: "{{ vm_owner_home }}/.ssh/{{ vm_owner_ssh_keyfilename }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0600"
+  when: vm_owner_ssh_privkey | length > 0
+  no_log: true
+
+- name: Deploy public SSH key for vm_owner
+  ansible.builtin.copy:
+    content: "{{ vm_owner_ssh_pubkey }}"
+    dest: "{{ vm_owner_home }}/.ssh/{{ vm_owner_ssh_keyfilename }}.pub"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"
+  when: vm_owner_ssh_pubkey | length > 0
+
+- name: Report missing user SSH key in user_data
+  ansible.builtin.debug:
+    msg: >-
+      No ssh_privkey set for {{ vm_owner_name }} in user_data;
+      they need to drop a key into ~/.ssh/ manually after first login.
+  when: vm_owner_ssh_privkey | length == 0
 
 - name: Configure ~/.ssh/config to auto-add unlocked keys to the agent
   ansible.builtin.blockinfile:

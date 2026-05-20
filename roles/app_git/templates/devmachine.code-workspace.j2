@@ -1,0 +1,29 @@
+{# Ansible-managed (roles/app_git). Multi-root VS Code workspace listing the
+   inferred project roots from app_git_repos. Repos that share a parent dir
+   are collapsed to that parent (so backend+frontend under work/git/app1/
+   surface as a single "app1" root). Explicit `project:` on a repo entry wins.
+   This file is written with force: false — delete it and re-run the playbook
+   to refresh from a changed app_git_repos. #}
+{% set parent_dirs = app_git_repos | map(attribute='target') | map('dirname') | list %}
+{% set ns = namespace(projects=[]) %}
+{% for repo in app_git_repos %}
+{%   set parent = repo.target | dirname %}
+{%   if repo.project is defined %}
+{%     set p = repo.project %}
+{%   elif (parent_dirs | select('equalto', parent) | list | length) > 1 %}
+{%     set p = parent %}
+{%   else %}
+{%     set p = repo.target %}
+{%   endif %}
+{%   if p not in ns.projects %}
+{%     set _ = ns.projects.append(p) %}
+{%   endif %}
+{% endfor %}
+{
+  "folders": [
+{%- for p in ns.projects %}
+    {"path": {{ p | to_json }}}{{ "" if loop.last else "," }}
+{%- endfor %}
+  ],
+  "settings": {}
+}
