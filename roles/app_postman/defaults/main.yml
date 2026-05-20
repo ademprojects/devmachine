@@ -4,4 +4,9 @@ app_postman_install_dir: /opt/Postman
 app_postman_executable_name: Postman
 app_postman_symlink: /usr/local/bin/postman
 app_postman_desktop_entry: /usr/share/applications/postman.desktop
-app_postman_desktop_icon: /opt/Postman/app/resources/app/assets/icon.png
+# Theme name used by the .desktop Icon= line and as the filename installed
+# into /usr/share/icons/hicolor/<size>/apps/. Was a hard-coded absolute path
+# into the extracted tarball before — switched to a theme name so the icon
+# survives Postman's internal layout changes and shows up in icon-theme-aware
+# UIs (taskbar, notifications) consistently.
+app_postman_desktop_icon: postman

@@ -46,6 +46,9 @@ VSCODE_EXTENSIONS=(
 
   # Testing
   ms-playwright.playwright
+
+  # Look & feel
+  pkief.material-icon-theme
 )
 
 # IntelliJ plugins: numeric plugin IDs from plugins.jetbrains.com.
@@ -54,6 +57,9 @@ VSCODE_EXTENSIONS=(
 # IntelliJ IDEA Ultimate already bundles the typical dev stack:
 #   - Spring + Spring Boot (full support: run configs, application.properties autocomplete,
 #     beans navigation, actuator endpoints)
+#   - Python (the Pro plugin, same engine as PyCharm Professional — do NOT add
+#     "Python Community Edition" (7322), it is Community-only and conflicts)
+#   - Lombok (bundled since IDEA 2020.3 — do NOT add id 6317)
 #   - JavaScript / TypeScript / React / JSX / HTML / CSS
 #   - Docker, Kubernetes
 #   - Database tools (DataGrip features)
@@ -61,7 +67,6 @@ VSCODE_EXTENSIONS=(
 #
 # Add IDs here only for things Ultimate does NOT bundle. Common optional additions:
 #   1085    # IdeaVim — vim keybindings
-#   7973    # SonarLint — static analysis
 #   12559   # Rainbow Brackets — color-coded bracket pairs
 #   7495    # .ignore — improved .gitignore / .dockerignore support
 #   18116   # GitHub Copilot — AI completion (subscription required)
@@ -70,6 +75,13 @@ INTELLIJ_PLUGINS=(
   15075   # JPA Buddy — JPA/Hibernate entity + repository generation, DDL diff
   25859   # CI Aid for GitLab — job navigation, includes resolution on top of bundled GitLab plugin
   23695   # WireMock — API simulation, stub management, WireMock Cloud integration
+  22113   # Save Actions X — reformat / optimize imports on save (active fork of the discontinued Save Actions)
+  9568    # Go — full Go language support (same engine as GoLand)
+  7973    # SonarQube for IDE — static analysis, formerly SonarLint
+  9333    # Makefile Language — syntax highlighting + targets for Makefiles
+  24543   # Deutsch (German) Language Pack — UI-Lokalisierung
+  7179    # MavenHelper — dependency tree, conflict resolution, "run/debug Maven goal" gutter
+  10044   # Atom Material Icons — pure icon pack (no theme change), matches VS Code's material-icon-theme
 )
 
 # Optional: pin IntelliJ build for compatibility filter (leave empty for latest).

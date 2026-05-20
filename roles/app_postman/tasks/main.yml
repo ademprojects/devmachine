@@ -54,6 +54,40 @@
     state: link
     force: true
 
+# Postman's tarball ships an icon (typically app/resources/app/assets/icon.png)
+# but doesn't register it in any theme directory. Find the largest icon in the
+# extracted tree and drop it into hicolor/512x512/apps/<name>.png so the
+# .desktop Icon= name resolves consistently across XFCE menus + notifications.
+- name: Locate Postman icon in extracted tarball
+  ansible.builtin.find:
+    paths: "{{ app_postman_install_dir }}"
+    patterns: 'icon.png,postman.png,Postman.png'
+    file_type: file
+    recurse: true
+  register: app_postman_found_icons
+
+- name: Assert Postman icon was discovered
+  ansible.builtin.assert:
+    that: app_postman_found_icons.files | length > 0
+    fail_msg: >-
+      No icon.png/postman.png found under {{ app_postman_install_dir }} —
+      Postman tarball layout may have changed; widen the find patterns above.
+
+- name: Install Postman icon into hicolor theme
+  ansible.builtin.copy:
+    src: "{{ (app_postman_found_icons.files | sort(attribute='size', reverse=true) | first).path }}"
+    dest: "/usr/share/icons/hicolor/512x512/apps/{{ app_postman_desktop_icon }}.png"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Refresh GTK icon cache for hicolor theme
+  ansible.builtin.command:
+    cmd: gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+  changed_when: false
+  failed_when: false
+
 - name: Write Postman desktop entry
   ansible.builtin.copy:
     dest: "{{ app_postman_desktop_entry }}"

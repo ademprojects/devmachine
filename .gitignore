@@ -15,6 +15,7 @@ roles/*/files/*.rpm
 roles/*/files/*.tar.gz
 roles/*/files/*.tar.xz
 roles/*/files/*.zip
+roles/*/files/*.AppImage
 roles/*/files/plugins/*.vsix
 roles/*/files/plugins/*.zip
 roles/*/files/plugins/*.jar
