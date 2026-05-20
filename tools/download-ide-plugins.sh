@@ -93,6 +93,28 @@ newest_in() {
     | sort -rn | head -1 | cut -d' ' -f2-
 }
 
+# Wipes everything in $1 except .gitkeep. Each role's files/<sub>/ dir is
+# dedicated, so this is safe and lets us avoid the curl --remote-header-name
+# "won't overwrite" failure when upstream filenames change between runs.
+cleanup_dir() {
+  find "$1" -maxdepth 1 -type f ! -name '.gitkeep' -delete 2>/dev/null || true
+}
+
+# Resolves the latest update file path (pluginId/updateId/name.zip) for an
+# IntelliJ plugin via the marketplace API. The old
+# /plugin/download?pluginId=<id> URL was retired and now returns 404; the
+# current working endpoint is /files/<path>. INTELLIJ_BUILD filters by IDE
+# compatibility when set.
+intellij_plugin_file() {
+  local id="$1"
+  local api_url="https://plugins.jetbrains.com/api/plugins/${id}/updates?size=1"
+  [[ -n "$INTELLIJ_BUILD" ]] && api_url="${api_url}&build=${INTELLIJ_BUILD}"
+  curl "${curl_opts[@]}" -s "$api_url" \
+    | grep -oE '"file":"[^"]+"' \
+    | head -1 \
+    | sed -E 's/"file":"([^"]+)"/\1/'
+}
+
 echo ">>> Downloading VS Code extensions to $VSCODE_DIR"
 for ext in "${VSCODE_EXTENSIONS[@]}"; do
   publisher="${ext%%.*}"
@@ -104,14 +126,16 @@ for ext in "${VSCODE_EXTENSIONS[@]}"; do
   assert_nonempty "$target" "$ext"
 done
 
+echo ">>> Cleaning previous IntelliJ plugin files in $INTELLIJ_DIR"
+cleanup_dir "$INTELLIJ_DIR"
+
 echo ">>> Downloading IntelliJ plugins to $INTELLIJ_DIR"
 for id in "${INTELLIJ_PLUGINS[@]}"; do
-  url="https://plugins.jetbrains.com/plugin/download?pluginId=${id}"
-  if [[ -n "$INTELLIJ_BUILD" ]]; then
-    url="${url}&build=${INTELLIJ_BUILD}"
-  fi
   printf '  - plugin id %s\n' "$id"
-  (cd "$INTELLIJ_DIR" && curl "${curl_opts[@]}" --remote-header-name --remote-name "$url")
+  file=$(intellij_plugin_file "$id")
+  [[ -n "$file" ]] || { echo "ERROR: no update found for IntelliJ plugin id $id (build=$INTELLIJ_BUILD)" >&2; exit 1; }
+  (cd "$INTELLIJ_DIR" && curl "${curl_opts[@]}" --remote-header-name --remote-name \
+    "https://plugins.jetbrains.com/files/${file}")
   saved=$(newest_in "$INTELLIJ_DIR")
   assert_nonempty "$saved" "IntelliJ plugin id $id"
 done

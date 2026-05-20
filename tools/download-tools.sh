@@ -31,6 +31,15 @@ newest_in() {
     | sort -rn | head -1 | cut -d' ' -f2-
 }
 
+# Wipes everything in $1 except .gitkeep. Each role's files/ dir is
+# dedicated, so this is safe and lets us avoid the curl --remote-header-name
+# "won't overwrite" failure when upstream filenames change between runs
+# (e.g. Postman renamed Postman-linux-x64-<ver>.tar.gz to
+# postman-linux-x64.tar.gz without a version segment).
+cleanup_dir() {
+  find "$1" -maxdepth 1 -type f ! -name '.gitkeep' -delete 2>/dev/null || true
+}
+
 github_latest_tag() {
   # Resolves the latest release tag for a GitHub repo. Set GH_TOKEN in the env
   # to authenticate the call (unauth limit: 60 requests/hour per IP).
@@ -53,8 +62,8 @@ github_latest_tag() {
 
 # ---- Postman ----------------------------------------------------------------
 
-echo ">>> Cleaning previous Postman tarballs in $POSTMAN_DIR"
-find "$POSTMAN_DIR" -maxdepth 1 -name 'Postman-*.tar.gz' -delete 2>/dev/null || true
+echo ">>> Cleaning previous Postman files in $POSTMAN_DIR"
+cleanup_dir "$POSTMAN_DIR"
 
 echo ">>> Downloading latest Postman Linux x64 tarball"
 (cd "$POSTMAN_DIR" && curl "${curl_opts[@]}" \
@@ -64,23 +73,25 @@ postman_saved=$(newest_in "$POSTMAN_DIR")
 assert_nonempty "$postman_saved" "Postman"
 
 # ---- Nextcloud desktop client ----------------------------------------------
+# Binaries live in nextcloud-releases/desktop, not the source repo
+# nextcloud/desktop (the source repo's releases have no attached assets).
 
-echo ">>> Cleaning previous Nextcloud AppImages in $NEXTCLOUD_DIR"
-find "$NEXTCLOUD_DIR" -maxdepth 1 -name 'Nextcloud-*-x86_64.AppImage' -delete 2>/dev/null || true
+echo ">>> Cleaning previous Nextcloud files in $NEXTCLOUD_DIR"
+cleanup_dir "$NEXTCLOUD_DIR"
 
-NC_TAG="$(github_latest_tag nextcloud/desktop)" || exit 1
+NC_TAG="$(github_latest_tag nextcloud-releases/desktop)" || exit 1
 NC_VER="${NC_TAG#v}"
 NC_FILE="Nextcloud-${NC_VER}-x86_64.AppImage"
 echo ">>> Downloading Nextcloud ${NC_VER}"
 curl "${curl_opts[@]}" \
   --output "$NEXTCLOUD_DIR/$NC_FILE" \
-  "https://github.com/nextcloud/desktop/releases/download/${NC_TAG}/${NC_FILE}"
+  "https://github.com/nextcloud-releases/desktop/releases/download/${NC_TAG}/${NC_FILE}"
 assert_nonempty "$NEXTCLOUD_DIR/$NC_FILE" "Nextcloud $NC_VER"
 
 # ---- KeePassXC --------------------------------------------------------------
 
-echo ">>> Cleaning previous KeePassXC AppImages in $KEEPASSXC_DIR"
-find "$KEEPASSXC_DIR" -maxdepth 1 -name 'KeePassXC-*-x86_64.AppImage' -delete 2>/dev/null || true
+echo ">>> Cleaning previous KeePassXC files in $KEEPASSXC_DIR"
+cleanup_dir "$KEEPASSXC_DIR"
 
 KPXC_TAG="$(github_latest_tag keepassxreboot/keepassxc)" || exit 1
 KPXC_VER="${KPXC_TAG#v}"
