@@ -51,12 +51,19 @@
 # match the current archive get wiped — current one is preserved.
 - name: Resolve IntelliJ tarball top-level directory name
   ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      tar -tzf {{ (app_intellij_package_dir ~ '/' ~ app_intellij_archive) | quote }} 2>/dev/null | head -1 | cut -d/ -f1
-    executable: /bin/bash
+    cmd: >-
+      tar -tzf {{ (app_intellij_package_dir ~ '/' ~ app_intellij_archive) | quote }} 2>/dev/null
+      | head -1 | cut -d/ -f1
   register: app_intellij_archive_topdir
   changed_when: false
+
+- name: Assert IntelliJ archive top-level directory was resolved
+  ansible.builtin.assert:
+    that:
+      - (app_intellij_archive_topdir.stdout | trim) | length > 0
+    fail_msg: >-
+      Could not determine top-level directory of {{ app_intellij_archive }}
+      under {{ app_intellij_package_dir }}; tarball may be missing or corrupt.
 
 - name: Find existing IntelliJ directories
   ansible.builtin.find:
