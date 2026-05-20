@@ -75,6 +75,12 @@ INTELLIJ_BUILD=""
 
 curl_opts=( --fail --location --retry 3 --connect-timeout 15 --show-error --silent )
 
+assert_nonempty() {
+  # Usage: assert_nonempty <path> <context>
+  local f="$1" ctx="$2"
+  [[ -s "$f" ]] || { echo "ERROR: empty/missing download: $f ($ctx)" >&2; exit 1; }
+}
+
 echo ">>> Downloading VS Code extensions to $VSCODE_DIR"
 for ext in "${VSCODE_EXTENSIONS[@]}"; do
   publisher="${ext%%.*}"
@@ -83,6 +89,7 @@ for ext in "${VSCODE_EXTENSIONS[@]}"; do
   target="$VSCODE_DIR/${ext}.vsix"
   printf '  - %-50s -> %s\n' "$ext" "$(basename "$target")"
   curl "${curl_opts[@]}" --compressed -o "$target" "$url"
+  assert_nonempty "$target" "$ext"
 done
 
 echo ">>> Downloading IntelliJ plugins to $INTELLIJ_DIR"
@@ -92,14 +99,20 @@ for id in "${INTELLIJ_PLUGINS[@]}"; do
     url="${url}&build=${INTELLIJ_BUILD}"
   fi
   printf '  - plugin id %s\n' "$id"
-  curl "${curl_opts[@]}" --remote-header-name --remote-name --output-dir "$INTELLIJ_DIR" "$url"
+  saved=$(curl "${curl_opts[@]}" --remote-header-name --remote-name --output-dir "$INTELLIJ_DIR" \
+    --write-out '%{filename_effective}' "$url")
+  assert_nonempty "$saved" "IntelliJ plugin id $id"
 done
 
 echo ""
 echo "Done."
 echo ""
 echo "VS Code plugins:"
-ls -lh "$VSCODE_DIR" | grep -v '^total\|\.gitkeep'
+ls -lh "$VSCODE_DIR" | grep -Ev '^total|\.gitkeep'
 echo ""
 echo "IntelliJ plugins:"
-ls -lh "$INTELLIJ_DIR" | grep -v '^total\|\.gitkeep'
+ls -lh "$INTELLIJ_DIR" | grep -Ev '^total|\.gitkeep'
+echo ""
+echo "SHA256 (paste into host_vars / role defaults if pinning):"
+find "$VSCODE_DIR" "$INTELLIJ_DIR" -type f ! -name '.gitkeep' -print0 \
+  | sort -z | xargs -0 -r sha256sum
