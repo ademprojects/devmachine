@@ -20,11 +20,35 @@
     group: "{{ vm_owner_group }}"
     mode: "0755"
 
-- name: Install pyenv from Nexus tarball
+- name: Discover pyenv tarball in role files
+  ansible.builtin.set_fact:
+    app_pyenv_tarball_files: >-
+      {{
+        query('fileglob', role_path ~ '/files/pyenv-*.tar.gz')
+        | map('basename')
+        | sort
+      }}
+
+- name: Fail when no pyenv tarball is present in role files
+  ansible.builtin.fail:
+    msg: >-
+      No pyenv tarball found in roles/app_pyenv/files/.
+      Run `tools/download-tools.sh` on the controller to fetch the latest one.
+  when: app_pyenv_tarball_files | length == 0
+  run_once: true
+
+- name: Fail when more than one pyenv tarball is present
+  ansible.builtin.fail:
+    msg: >-
+      Multiple pyenv tarballs found in roles/app_pyenv/files/
+      ({{ app_pyenv_tarball_files | join(', ') }}). Keep only one.
+  when: app_pyenv_tarball_files | length > 1
+  run_once: true
+
+- name: Install pyenv from local tarball
   ansible.builtin.unarchive:
-    src: "{{ app_pyenv_archive_url }}"
+    src: "{{ app_pyenv_tarball_files[0] }}"
     dest: "{{ app_pyenv_install_dir }}"
-    remote_src: true
     extra_opts:
       - --strip-components=1
     owner: "{{ vm_owner_name }}"
@@ -107,7 +131,46 @@
       - app_pyenv_target_python is match('^\d+\.\d+\.\d+$')
     fail_msg: "Could not resolve a Python version to install (got '{{ app_pyenv_target_python }}')."
 
-- name: Install target Python via pyenv (build from source through Nexus mirror)
+- name: Discover bundled CPython source tarballs in role files
+  ansible.builtin.set_fact:
+    app_pyenv_python_tarball_files: >-
+      {{ query('fileglob', role_path ~ '/files/Python-*.tar.xz') | map('basename') | sort | list }}
+
+- name: Assert CPython source for target version is bundled
+  ansible.builtin.assert:
+    that:
+      - ('Python-' ~ app_pyenv_target_python ~ '.tar.xz') in app_pyenv_python_tarball_files
+    fail_msg: >-
+      Python-{{ app_pyenv_target_python }}.tar.xz not in roles/app_pyenv/files/.
+      Run `PYTHON_VERSION={{ app_pyenv_target_python }} tools/download-tools.sh`
+      on the controller, or pick a version that is bundled:
+      {{ app_pyenv_python_tarball_files | join(', ') | default('none', true) }}.
+
+- name: Ensure pyenv cache directory exists
+  ansible.builtin.file:
+    path: "{{ app_pyenv_install_dir }}/cache"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+# Pre-seed python-build's cache so `pyenv install` skips its HTTP fetch.
+# python-build only re-downloads if the cache file is missing OR the SHA256
+# doesn't match its recipe — python.org tarballs always match, so this is
+# a no-op on repeat runs (force: false also keeps it idempotent).
+- name: Pre-populate pyenv cache with bundled CPython source tarballs
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ app_pyenv_install_dir }}/cache/{{ item }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"
+    force: false
+  loop: "{{ app_pyenv_python_tarball_files }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Install target Python via pyenv (uses pre-cached source tarball)
   ansible.builtin.command:
     cmd: "{{ app_pyenv_install_dir }}/bin/pyenv install --skip-existing {{ app_pyenv_target_python }}"
   become: true

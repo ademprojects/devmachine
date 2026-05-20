@@ -230,8 +230,10 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 
 `app_pyenv`-Rolle:
 
-- `app_pyenv_version` — pyenv-Tag (Default `2.6.31`).
-- `app_pyenv_archive_url` — Nexus-Pfad zum pyenv-Tarball (Default leitet sich aus `app_pyenv_version` ab).
+- Pyenv-Tarball wird auf dem Controller per `tools/download-tools.sh` aus GitHub gezogen
+  (`pyenv/pyenv` latest Release) und landet als `roles/app_pyenv/files/pyenv-<ver>.tar.gz`.
+  Die Rolle macht Auto-Discovery per glob `pyenv-*.tar.gz` und failt klar wenn 0 oder >1 Files
+  da sind (gleiches Pattern wie Postman/Nextcloud/KeePassXC).
 - `app_pyenv_python_version` — zu installierende Python-Version (Default `3.14.5`). Leer = automatische
   Auflösung der höchsten 3.x.y aus `pyenv install --list`.
 - `app_pyenv_python_build_mirror_url` — Python-Source-Tarball-Mirror auf Nexus.

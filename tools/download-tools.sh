@@ -13,7 +13,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 POSTMAN_DIR="$REPO_ROOT/roles/app_postman/files"
 NEXTCLOUD_DIR="$REPO_ROOT/roles/app_nextcloud/files"
 KEEPASSXC_DIR="$REPO_ROOT/roles/app_keepassxc/files"
-mkdir -p "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR"
+PYENV_DIR="$REPO_ROOT/roles/app_pyenv/files"
+mkdir -p "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR"
 
 curl_opts=( --fail --location --retry 3 --connect-timeout 15 --show-error )
 
@@ -102,6 +103,38 @@ curl "${curl_opts[@]}" \
   "https://github.com/keepassxreboot/keepassxc/releases/download/${KPXC_TAG}/${KPXC_FILE}"
 assert_nonempty "$KEEPASSXC_DIR/$KPXC_FILE" "KeePassXC $KPXC_VER"
 
+# ---- pyenv + CPython source -----------------------------------------------
+# pyenv itself is a shell tool, not a PyPI package — no Nexus pip mirror can
+# help. Pull the tagged tarball from GitHub; the role discovers whichever
+# pyenv-*.tar.gz landed here and unpacks it on the target.
+#
+# pyenv install <X.Y.Z> normally downloads the CPython source from
+# PYTHON_BUILD_MIRROR_URL (defaults to a Nexus raw repo that may not exist).
+# We instead pre-fetch Python-<ver>.tar.xz from python.org here and the role
+# drops it into $PYENV_ROOT/cache/ — python-build then uses the cache and
+# never tries to reach the mirror. Override PYTHON_VERSION env var to bundle
+# a different release (must match app_pyenv_python_version at Ansible time).
+
+echo ">>> Cleaning previous pyenv files in $PYENV_DIR"
+cleanup_dir "$PYENV_DIR"
+
+PYENV_TAG="$(github_latest_tag pyenv/pyenv)" || exit 1
+PYENV_VER="${PYENV_TAG#v}"
+PYENV_FILE="pyenv-${PYENV_VER}.tar.gz"
+echo ">>> Downloading pyenv ${PYENV_VER}"
+curl "${curl_opts[@]}" \
+  --output "$PYENV_DIR/$PYENV_FILE" \
+  "https://github.com/pyenv/pyenv/archive/refs/tags/${PYENV_TAG}.tar.gz"
+assert_nonempty "$PYENV_DIR/$PYENV_FILE" "pyenv $PYENV_VER"
+
+PYTHON_VERSION="${PYTHON_VERSION:-3.14.5}"
+PYTHON_FILE="Python-${PYTHON_VERSION}.tar.xz"
+echo ">>> Downloading CPython ${PYTHON_VERSION} source tarball"
+curl "${curl_opts[@]}" \
+  --output "$PYENV_DIR/$PYTHON_FILE" \
+  "https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_FILE}"
+assert_nonempty "$PYENV_DIR/$PYTHON_FILE" "Python $PYTHON_VERSION"
+
 echo ""
 echo "Done."
 echo ""
@@ -114,6 +147,9 @@ echo ""
 echo "KeePassXC files:"
 ls -lh "$KEEPASSXC_DIR" | grep -Ev '^total|\.gitkeep' || true
 echo ""
+echo "pyenv files:"
+ls -lh "$PYENV_DIR" | grep -Ev '^total|\.gitkeep' || true
+echo ""
 echo "SHA256 (paste into host_vars / role defaults if pinning):"
-find "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" -type f ! -name '.gitkeep' -print0 \
+find "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR" -type f ! -name '.gitkeep' -print0 \
   | sort -z | xargs -0 -r sha256sum

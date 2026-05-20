@@ -1,6 +1,8 @@
 ---
-app_pyenv_version: "2.6.31"
-app_pyenv_archive_url: "{{ devmachine_nexus_base_url }}/raw/pyenv/pyenv-{{ app_pyenv_version }}.tar.gz"
+# Pyenv is a shell tool, not a PyPI package. The tarball is fetched on the
+# controller by tools/download-tools.sh and lands in roles/app_pyenv/files/
+# as pyenv-<version>.tar.gz; the role auto-discovers whichever version is
+# there (matches the Postman/Nextcloud/KeePassXC pattern).
 app_pyenv_install_subdir: .pyenv
 # Pyenv lives on the data disk (Python builds + installed versions can grow large).
 # A symlink {{ vm_owner_home }}/.pyenv → app_pyenv_install_dir keeps tooling that
