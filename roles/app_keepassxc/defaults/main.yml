@@ -7,3 +7,6 @@ app_keepassxc_desktop_entry: /usr/share/applications/keepassxc.desktop
 app_keepassxc_runtime_packages:
   - fuse
   - fuse-libs
+# Name used by the .desktop file's Icon= line and as the fallback filename
+# when the AppImage doesn't ship a hicolor icon tree.
+app_keepassxc_icon_name: keepassxc

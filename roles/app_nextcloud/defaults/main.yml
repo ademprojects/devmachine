@@ -11,3 +11,6 @@ app_nextcloud_sync_dir: "{{ common_storage_mount_point | default('/mnt/data') }}
 app_nextcloud_runtime_packages:
   - fuse
   - fuse-libs
+# Name used by the .desktop file's Icon= line and as the fallback filename
+# when the AppImage doesn't ship a hicolor icon tree.
+app_nextcloud_icon_name: nextcloud

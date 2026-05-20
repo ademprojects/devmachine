@@ -45,6 +45,68 @@
     group: root
     mode: "0755"
 
+# Same icon-extraction flow as app_nextcloud — see comments there.
+- name: Create tempdir for KeePassXC AppImage extraction
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: keepassxc-extract-
+  register: app_keepassxc_extract_tmp
+  changed_when: false
+
+- name: Extract KeePassXC AppImage in tempdir
+  ansible.builtin.command:
+    cmd: "{{ app_keepassxc_install_dir }}/{{ app_keepassxc_appimage_files[0] }} --appimage-extract"
+    chdir: "{{ app_keepassxc_extract_tmp.path }}"
+  changed_when: false
+
+- name: Check whether AppImage carries a hicolor icon tree
+  ansible.builtin.stat:
+    path: "{{ app_keepassxc_extract_tmp.path }}/squashfs-root/usr/share/icons/hicolor"
+  register: app_keepassxc_hicolor_stat
+
+- name: Install KeePassXC hicolor icons system-wide
+  ansible.builtin.copy:
+    src: "{{ app_keepassxc_extract_tmp.path }}/squashfs-root/usr/share/icons/hicolor/"
+    dest: /usr/share/icons/hicolor/
+    remote_src: true
+    owner: root
+    group: root
+    mode: preserve
+  when: app_keepassxc_hicolor_stat.stat.exists
+
+- name: Locate top-level AppImage icon (fallback when no hicolor tree)
+  ansible.builtin.find:
+    paths: "{{ app_keepassxc_extract_tmp.path }}/squashfs-root"
+    patterns: '*.png,*.svg'
+    file_type: file
+    recurse: false
+  register: app_keepassxc_toplevel_icons
+  when: not app_keepassxc_hicolor_stat.stat.exists
+
+- name: Install KeePassXC top-level icon as 256x256 (fallback)
+  ansible.builtin.copy:
+    src: "{{ app_keepassxc_toplevel_icons.files[0].path }}"
+    dest: "/usr/share/icons/hicolor/256x256/apps/{{ app_keepassxc_icon_name }}.png"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - not app_keepassxc_hicolor_stat.stat.exists
+    - app_keepassxc_toplevel_icons.files | length > 0
+
+- name: Refresh GTK icon cache for hicolor theme
+  ansible.builtin.command:
+    cmd: gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+  changed_when: false
+  failed_when: false
+
+- name: Remove KeePassXC AppImage extraction tempdir
+  ansible.builtin.file:
+    path: "{{ app_keepassxc_extract_tmp.path }}"
+    state: absent
+  changed_when: false
+
 - name: Symlink KeePassXC launcher
   ansible.builtin.file:
     src: "{{ app_keepassxc_install_dir }}/{{ app_keepassxc_appimage_files[0] }}"

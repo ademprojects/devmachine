@@ -45,6 +45,73 @@
     group: root
     mode: "0755"
 
+# AppImages don't register icons system-wide — the .desktop Icon= name only
+# resolves if we drop the actual icon files into /usr/share/icons/hicolor/.
+# Extract the AppImage to a tempdir, copy out either the hicolor tree (when
+# the AppImage ships one) or the top-level icon as a 256x256 fallback, then
+# refresh the GTK icon cache. Whole extract is thrown away afterwards.
+
+- name: Create tempdir for Nextcloud AppImage extraction
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: nextcloud-extract-
+  register: app_nextcloud_extract_tmp
+  changed_when: false
+
+- name: Extract Nextcloud AppImage in tempdir
+  ansible.builtin.command:
+    cmd: "{{ app_nextcloud_install_dir }}/{{ app_nextcloud_appimage_files[0] }} --appimage-extract"
+    chdir: "{{ app_nextcloud_extract_tmp.path }}"
+  changed_when: false
+
+- name: Check whether AppImage carries a hicolor icon tree
+  ansible.builtin.stat:
+    path: "{{ app_nextcloud_extract_tmp.path }}/squashfs-root/usr/share/icons/hicolor"
+  register: app_nextcloud_hicolor_stat
+
+- name: Install Nextcloud hicolor icons system-wide
+  ansible.builtin.copy:
+    src: "{{ app_nextcloud_extract_tmp.path }}/squashfs-root/usr/share/icons/hicolor/"
+    dest: /usr/share/icons/hicolor/
+    remote_src: true
+    owner: root
+    group: root
+    mode: preserve
+  when: app_nextcloud_hicolor_stat.stat.exists
+
+- name: Locate top-level AppImage icon (fallback when no hicolor tree)
+  ansible.builtin.find:
+    paths: "{{ app_nextcloud_extract_tmp.path }}/squashfs-root"
+    patterns: '*.png,*.svg'
+    file_type: file
+    recurse: false
+  register: app_nextcloud_toplevel_icons
+  when: not app_nextcloud_hicolor_stat.stat.exists
+
+- name: Install Nextcloud top-level icon as 256x256 (fallback)
+  ansible.builtin.copy:
+    src: "{{ app_nextcloud_toplevel_icons.files[0].path }}"
+    dest: "/usr/share/icons/hicolor/256x256/apps/{{ app_nextcloud_icon_name }}.png"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - not app_nextcloud_hicolor_stat.stat.exists
+    - app_nextcloud_toplevel_icons.files | length > 0
+
+- name: Refresh GTK icon cache for hicolor theme
+  ansible.builtin.command:
+    cmd: gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+  changed_when: false
+  failed_when: false
+
+- name: Remove Nextcloud AppImage extraction tempdir
+  ansible.builtin.file:
+    path: "{{ app_nextcloud_extract_tmp.path }}"
+    state: absent
+  changed_when: false
+
 - name: Symlink Nextcloud launcher
   ansible.builtin.file:
     src: "{{ app_nextcloud_install_dir }}/{{ app_nextcloud_appimage_files[0] }}"
