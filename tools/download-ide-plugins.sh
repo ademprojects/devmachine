@@ -81,6 +81,14 @@ assert_nonempty() {
   [[ -s "$f" ]] || { echo "ERROR: empty/missing download: $f ($ctx)" >&2; exit 1; }
 }
 
+# Returns the most recently modified non-.gitkeep file in $1. Used to find
+# the file curl just wrote via --remote-header-name --remote-name (older
+# curls report the wrong filename via --write-out %{filename_effective}).
+newest_in() {
+  find "$1" -maxdepth 1 -type f ! -name '.gitkeep' -printf '%T@ %p\n' \
+    | sort -rn | head -1 | cut -d' ' -f2-
+}
+
 echo ">>> Downloading VS Code extensions to $VSCODE_DIR"
 for ext in "${VSCODE_EXTENSIONS[@]}"; do
   publisher="${ext%%.*}"
@@ -99,9 +107,9 @@ for id in "${INTELLIJ_PLUGINS[@]}"; do
     url="${url}&build=${INTELLIJ_BUILD}"
   fi
   printf '  - plugin id %s\n' "$id"
-  saved=$(cd "$INTELLIJ_DIR" && curl "${curl_opts[@]}" --remote-header-name --remote-name \
-    --write-out '%{filename_effective}' "$url")
-  assert_nonempty "$INTELLIJ_DIR/$saved" "IntelliJ plugin id $id"
+  (cd "$INTELLIJ_DIR" && curl "${curl_opts[@]}" --remote-header-name --remote-name "$url")
+  saved=$(newest_in "$INTELLIJ_DIR")
+  assert_nonempty "$saved" "IntelliJ plugin id $id"
 done
 
 echo ""

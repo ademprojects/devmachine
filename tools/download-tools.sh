@@ -23,6 +23,14 @@ assert_nonempty() {
   [[ -s "$f" ]] || { echo "ERROR: empty/missing download: $f ($ctx)" >&2; exit 1; }
 }
 
+# Returns the most recently modified non-.gitkeep file in $1. Used to find
+# the file curl just wrote via --remote-header-name --remote-name (older
+# curls report the wrong filename via --write-out %{filename_effective}).
+newest_in() {
+  find "$1" -maxdepth 1 -type f ! -name '.gitkeep' -printf '%T@ %p\n' \
+    | sort -rn | head -1 | cut -d' ' -f2-
+}
+
 github_latest_tag() {
   # Resolves the latest release tag for a GitHub repo. Set GH_TOKEN in the env
   # to authenticate the call (unauth limit: 60 requests/hour per IP).
@@ -49,11 +57,11 @@ echo ">>> Cleaning previous Postman tarballs in $POSTMAN_DIR"
 find "$POSTMAN_DIR" -maxdepth 1 -name 'Postman-*.tar.gz' -delete 2>/dev/null || true
 
 echo ">>> Downloading latest Postman Linux x64 tarball"
-postman_saved=$(cd "$POSTMAN_DIR" && curl "${curl_opts[@]}" \
+(cd "$POSTMAN_DIR" && curl "${curl_opts[@]}" \
   --remote-header-name --remote-name \
-  --write-out '%{filename_effective}' \
   https://dl.pstmn.io/download/latest/linux_64)
-assert_nonempty "$POSTMAN_DIR/$postman_saved" "Postman"
+postman_saved=$(newest_in "$POSTMAN_DIR")
+assert_nonempty "$postman_saved" "Postman"
 
 # ---- Nextcloud desktop client ----------------------------------------------
 
