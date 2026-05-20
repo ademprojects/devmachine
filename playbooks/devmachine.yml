@@ -23,10 +23,10 @@
     - role: app_nextcloud
     - role: app_keepassxc
     - role: common_xrdp
+    - role: app_keyring
     - role: app_podman
     - role: app_java
     - role: app_pyenv
     - role: app_nvm
     - role: app_maven
     - role: app_git
-    - role: app_keyring
