@@ -79,7 +79,8 @@ cp ./downloads/intellij-plugins/*.zip                 ./roles/app_intellij/files
 
 Die Rollen `app_vscode` und `app_intellij` kopieren die Dateien dann auf den Zielhost und
 installieren VS Code (systemweit, plus VSIX-Extensions für `vm_owner[0]`) bzw. IntelliJ
-(systemweit unter `/opt/jetbrains/idea-*` mit Symlink `/usr/local/bin/idea`).
+(systemweit unter `{{ common_storage_mount_point }}/apps/jetbrains/idea-*` — also per Default
+`/mnt/data/apps/jetbrains/idea-*` — mit Symlink `/usr/local/bin/idea`).
 
 ## VS Code- und IntelliJ-Plugins per Skript holen
 
@@ -123,7 +124,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 
 - `app_vscode_rpm` — Dateiname des VS Code RPMs in `files/`.
 - `app_vscode_sha256` — optionale SHA256-Prüfung des RPMs.
-- `app_vscode_package_dir` — Zielverzeichnis auf dem Host (Default `/opt/devmachine/packages`).
+- `app_vscode_package_dir` — Staging-Verzeichnis für das RPM auf dem Host (Default `{{ common_storage_mount_point }}/apps/packages`, also `/mnt/data/apps/packages`).
 - `app_vscode_plugins_subdir` — Unterverzeichnis unter `files/` für VSIX-Plugins (Default `plugins`).
   Alle `*.vsix` darin werden automatisch erkannt, auf den Host kopiert und für `vm_owner[0]`
   installiert. Drop-File → nächster Lauf zieht es hoch.
@@ -132,7 +133,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 
 - `app_intellij_archive` — Dateiname des IntelliJ-Tarballs in `files/`.
 - `app_intellij_sha256` — optionale SHA256-Prüfung des Tarballs.
-- `app_intellij_install_dir` — Basis für die Extraktion (Default `/opt/jetbrains`).
+- `app_intellij_install_dir` — Basis für die Extraktion (Default `{{ common_storage_mount_point }}/apps/jetbrains`, also `/mnt/data/apps/jetbrains`).
 - `app_intellij_symlink` — Symlink zum `idea`-Launcher.
 - `app_intellij_package_dir` — Staging-Ort des Tarballs auf dem Host.
 - `app_intellij_plugins_subdir` — Unterverzeichnis unter `files/` für Plugins (Default `plugins`).
@@ -149,7 +150,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 `app_postman`-Rolle:
 
 - `app_postman_package_dir` — Staging-Verzeichnis auf dem Host.
-- `app_postman_install_dir` (Default `/opt/Postman`) — Zielverzeichnis nach Extraction.
+- `app_postman_install_dir` (Default `{{ common_storage_mount_point }}/apps/Postman`, also `/mnt/data/apps/Postman`) — Zielverzeichnis nach Extraction.
 - `app_postman_executable_name` (Default `Postman`) — Name des Launcher-Binarys im Install-Dir.
 - `app_postman_symlink` (Default `/usr/local/bin/postman`).
 - `app_postman_desktop_entry` / `app_postman_desktop_icon` — Pfad + Icon-Pfad
@@ -345,15 +346,25 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 - `common_xrdp_ini_entries`
 - `common_xrdp_sesman_ini_entries`
 
-`common_storage`-Rolle:
+`common_storage`-Rolle (zwei unabhängige Concerns):
 
-- `common_storage_setup_enabled`
-- `common_storage_device`
-- `common_storage_vg_name`
-- `common_storage_lv_name`
-- `common_storage_lv_size`
-- `common_storage_fs_type`
-- `common_storage_mount_point`
+Concern 1 — root LV mit freiem VG-Platz erweitern (Default **on**, no-op wenn nichts frei):
+
+- `common_storage_grow_root_enabled` (Default `true`)
+- `common_storage_grow_root_vg` (Default `vg0`) — VG in der das Ziel-LV liegt
+- `common_storage_grow_root_lv` (Default `root`) — LV das erweitert wird (online XFS/ext4-Grow)
+
+Concern 2 — frische Daten-Disk einrichten (PV → VG → LV → FS → Mount). Default **on** weil
+diese Devmachine `/dev/sdb` als 100-GB-Daten-Disk hat; auf Hosts ohne diese Disk knallt der
+Run am „storage device not found"-Assert — dann `common_storage_setup_enabled: false` setzen.
+
+- `common_storage_setup_enabled` (Default `true`)
+- `common_storage_device` (Default `/dev/sdb`)
+- `common_storage_vg_name` (Default `vg_devdata`)
+- `common_storage_lv_name` (Default `lv_workspaces`)
+- `common_storage_lv_size` (Default `100%FREE`)
+- `common_storage_fs_type` (Default `xfs`)
+- `common_storage_mount_point` (Default `/mnt/data`) — wird auch von App-Rollen referenziert
 - `common_storage_mount_options`
 
 Übergreifend:
@@ -476,19 +487,28 @@ xrdp / XFCE:
 
 Storage / Workspace-Mount:
 
-- Optionale Rolle `common_storage` legt einen LVM-Stack (PV → VG → LV → XFS) auf einer leeren Disk an
-  und mountet sie unter `common_storage_mount_point` (Default `/mnt/data`).
-- Aktivierung via `common_storage_setup_enabled: true`. Default-Device ist `/dev/sdb`.
+`common_storage` hat **zwei unabhängige Concerns**, beide standardmäßig **aktiv**:
+
+- **Concern 1 — root LV erweitern**: nutzt freien Platz in einer bestehenden VG (Default `vg0`) um
+  das Root-LV (Default `root`) zu vergrößern. Online-Grow für XFS / ext4 über
+  `community.general.lvol` mit `size: +100%FREE resizefs: true`. No-op wenn die VG nicht existiert
+  oder 0 Byte free hat. Deaktivieren via `common_storage_grow_root_enabled: false`.
+- **Concern 2 — Daten-Disk einrichten**: legt einen LVM-Stack (PV → VG `vg_devdata` → LV
+  `lv_workspaces` → XFS) auf einer dedizierten Disk an (Default `/dev/sdb`) und mountet sie unter
+  `common_storage_mount_point` (Default `/mnt/data`). Deaktivieren via
+  `common_storage_setup_enabled: false` (notwendig auf Hosts ohne `/dev/sdb`).
+
 - `vm_owner` muss als Liste mit genau einem Eintrag gesetzt sein (z. B. `vm_owner: ['huhu']`).
   Der Mountpoint gehört diesem User; die primäre Gruppe wird automatisch aus passwd/group aufgelöst.
 - Die Rolle bricht ab, wenn das Device bereits gemountet ist, die Root-Partition trägt oder
   eine nicht-LVM-Signatur enthält (Schutz vor versehentlichem Daten-Wipe). Bestehende LVM-Strukturen
   werden idempotent erkannt.
-- Implementiert ausschließlich mit `ansible.builtin`-Modulen (LVM-CLI via `command`); keine
-  Galaxy-Collections erforderlich.
-- Workspace-Pfad der `app_workspace`-Rolle (Default `/mnt/data/work`) liegt unter dem Mount,
-  sobald `common_storage` aktiv ist.
-- Podman-Container-Storage (`app_podman_storage_base`, Default `/mnt/data/containers`) ebenfalls.
+- LVM-CLI via `ansible.builtin.command`; root-Extend via `community.general.lvol`.
+- App-Installs landen unter `{{ common_storage_mount_point }}/apps/...` (also `/mnt/data/apps/...`)
+  statt auf `/opt`, um den OS-Disk klein zu halten. Betroffen: app_intellij, app_postman,
+  app_nextcloud, app_keepassxc; staging-Verzeichnisse von app_vscode und app_chrome.
+- Workspace-Pfad der `app_workspace`-Rolle (Default `/mnt/data/work`) und Podman-Container-Storage
+  (`app_podman_storage_base`, Default `/mnt/data/containers`) liegen ebenfalls unter dem Mount.
 
 Workspace:
 

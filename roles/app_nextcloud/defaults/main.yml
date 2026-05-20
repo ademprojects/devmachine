@@ -1,7 +1,7 @@
 ---
 # AppImage-based install — drop the latest Nextcloud-*-x86_64.AppImage into
 # roles/app_nextcloud/files/ (use tools/download-tools.sh on the controller).
-app_nextcloud_install_dir: /opt/nextcloud
+app_nextcloud_install_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/nextcloud"
 app_nextcloud_symlink: /usr/local/bin/nextcloud
 app_nextcloud_desktop_entry: /usr/share/applications/nextcloud.desktop
 # Sync folder root on the data disk; created with vm_owner ownership.

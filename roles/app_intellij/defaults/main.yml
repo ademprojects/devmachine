@@ -1,7 +1,7 @@
 ---
 app_intellij_archive: idea-2026.1.2.tar.gz
 app_intellij_sha256: ""
-app_intellij_package_dir: /opt/devmachine/packages
-app_intellij_install_dir: /opt/jetbrains
+app_intellij_package_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/packages"
+app_intellij_install_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/jetbrains"
 app_intellij_symlink: /usr/local/bin/idea
 app_intellij_plugins_subdir: plugins

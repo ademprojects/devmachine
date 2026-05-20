@@ -6,7 +6,6 @@
   roles:
     - role: common_vm_owner_facts
     - role: common_storage
-      when: common_storage_setup_enabled | default(false) | bool
     - role: common_nexus
     - role: common_packages
     - role: common_sysctl

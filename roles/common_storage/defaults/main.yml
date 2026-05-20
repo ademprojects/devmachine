@@ -1,5 +1,14 @@
 ---
-common_storage_setup_enabled: false
+# --- Concern 1: extend an existing root LV with the free space left in its VG
+# (e.g. the 2.9 GiB usually unallocated in vg0 by RHEL 9 default partitioning).
+# Idempotent — no-op when the VG has no free space.
+common_storage_grow_root_enabled: true
+common_storage_grow_root_vg: vg0
+common_storage_grow_root_lv: root
+
+# --- Concern 2: set up a dedicated data disk (fresh PV + VG + LV + mount).
+# Used for offloading bulky app installs and per-user dev data off the OS disk.
+common_storage_setup_enabled: true
 common_storage_device: /dev/sdb
 common_storage_vg_name: vg_devdata
 common_storage_lv_name: lv_workspaces

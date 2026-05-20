@@ -1,25 +1,96 @@
 ---
+- name: Ensure LVM userspace tools are installed
+  ansible.builtin.dnf:
+    name: lvm2
+    state: present
+  when:
+    - (common_storage_grow_root_enabled | bool) or (common_storage_setup_enabled | bool)
+
+# ---------------------------------------------------------------------------
+# Concern 1: grow the root LV into any free VG space.
+# ---------------------------------------------------------------------------
+
+- name: Detect target VG for root LV extension
+  ansible.builtin.command:
+    cmd: "vgs --noheadings -o vg_name {{ common_storage_grow_root_vg }}"
+  register: common_storage_grow_root_vg_stat
+  changed_when: false
+  failed_when: false
+  when: common_storage_grow_root_enabled | bool
+
+- name: Skip with notice when target VG for root extension is missing
+  ansible.builtin.debug:
+    msg: >-
+      Volume group {{ common_storage_grow_root_vg }} not found on host;
+      skipping root LV extension (host probably uses a different LVM layout).
+  when:
+    - common_storage_grow_root_enabled | bool
+    - common_storage_grow_root_vg_stat is defined
+    - common_storage_grow_root_vg_stat.rc != 0
+
+- name: Read free space in target VG
+  ansible.builtin.command:
+    cmd: "vgs --noheadings --units b --nosuffix -o vg_free {{ common_storage_grow_root_vg }}"
+  register: common_storage_grow_root_vg_free
+  changed_when: false
+  when:
+    - common_storage_grow_root_enabled | bool
+    - common_storage_grow_root_vg_stat is defined
+    - common_storage_grow_root_vg_stat.rc == 0
+
+- name: Report free VG space before extension
+  ansible.builtin.debug:
+    msg: >-
+      VG {{ common_storage_grow_root_vg }} has
+      {{ ((common_storage_grow_root_vg_free.stdout | trim | int) / 1024 / 1024) | round(1) }} MiB free;
+      extending {{ common_storage_grow_root_lv }} into it.
+  when:
+    - common_storage_grow_root_enabled | bool
+    - common_storage_grow_root_vg_free is defined
+    - (common_storage_grow_root_vg_free.stdout | trim | int) > 0
+
+- name: Extend root LV and grow XFS/ext4 filesystem online
+  community.general.lvol:
+    vg: "{{ common_storage_grow_root_vg }}"
+    lv: "{{ common_storage_grow_root_lv }}"
+    size: +100%FREE
+    resizefs: true
+  when:
+    - common_storage_grow_root_enabled | bool
+    - common_storage_grow_root_vg_free is defined
+    - (common_storage_grow_root_vg_free.stdout | trim | int) > 0
+
+# ---------------------------------------------------------------------------
+# Concern 2: set up a fresh data disk (PV + VG + LV + mount).
+# ---------------------------------------------------------------------------
+
 - name: Validate storage device path
   ansible.builtin.assert:
     that:
       - common_storage_device | length > 0
       - common_storage_device is match('^/dev/[A-Za-z0-9_/-]+$')
     fail_msg: "common_storage_device must be an absolute /dev path."
+  when: common_storage_setup_enabled | bool
 
 - name: Check that storage device exists on host
   ansible.builtin.stat:
     path: "{{ common_storage_device }}"
   register: common_storage_device_stat
+  when: common_storage_setup_enabled | bool
 
 - name: Fail when storage device is missing
   ansible.builtin.fail:
     msg: "Storage device {{ common_storage_device }} not found on host."
-  when: not common_storage_device_stat.stat.exists
+  when:
+    - common_storage_setup_enabled | bool
+    - common_storage_device_stat is defined
+    - not common_storage_device_stat.stat.exists
 
 - name: Gather current mounts
   ansible.builtin.setup:
     gather_subset:
       - mounts
+  when: common_storage_setup_enabled | bool
 
 - name: Ensure storage device is not already mounted elsewhere
   ansible.builtin.assert:
@@ -31,6 +102,7 @@
     fail_msg: >-
       Storage device {{ common_storage_device }} (or a partition of it) is already mounted.
       Refusing to reconfigure to avoid data loss.
+  when: common_storage_setup_enabled | bool
 
 - name: Ensure storage device is not the root disk
   ansible.builtin.assert:
@@ -40,11 +112,7 @@
     fail_msg: >-
       Refusing to use {{ common_storage_device }} for workspace storage:
       it currently hosts the root filesystem.
-
-- name: Ensure LVM userspace tools are installed
-  ansible.builtin.dnf:
-    name: lvm2
-    state: present
+  when: common_storage_setup_enabled | bool
 
 - name: Detect existing signature on storage device
   ansible.builtin.command:
@@ -52,6 +120,7 @@
   register: common_storage_device_signature
   changed_when: false
   failed_when: false
+  when: common_storage_setup_enabled | bool
 
 - name: Refuse to wipe non-LVM signature on storage device
   ansible.builtin.fail:
@@ -60,6 +129,8 @@
       '{{ common_storage_device_signature.stdout | trim }}'.
       Refusing to overwrite automatically. Wipe it manually if intentional.
   when:
+    - common_storage_setup_enabled | bool
+    - common_storage_device_signature is defined
     - common_storage_device_signature.rc == 0
     - (common_storage_device_signature.stdout | trim) | length > 0
     - (common_storage_device_signature.stdout | trim) != 'LVM2_member'
@@ -70,11 +141,15 @@
   register: common_storage_pv_check
   changed_when: false
   failed_when: false
+  when: common_storage_setup_enabled | bool
 
 - name: Create LVM physical volume
   ansible.builtin.command:
     cmd: "pvcreate -y {{ common_storage_device }}"
-  when: common_storage_pv_check.rc != 0
+  when:
+    - common_storage_setup_enabled | bool
+    - common_storage_pv_check is defined
+    - common_storage_pv_check.rc != 0
 
 - name: Check whether volume group already exists
   ansible.builtin.command:
@@ -82,11 +157,15 @@
   register: common_storage_vg_check
   changed_when: false
   failed_when: false
+  when: common_storage_setup_enabled | bool
 
 - name: Create LVM volume group
   ansible.builtin.command:
     cmd: "vgcreate {{ common_storage_vg_name }} {{ common_storage_device }}"
-  when: common_storage_vg_check.rc != 0
+  when:
+    - common_storage_setup_enabled | bool
+    - common_storage_vg_check is defined
+    - common_storage_vg_check.rc != 0
 
 - name: Check whether logical volume already exists
   ansible.builtin.command:
@@ -94,11 +173,15 @@
   register: common_storage_lv_check
   changed_when: false
   failed_when: false
+  when: common_storage_setup_enabled | bool
 
 - name: Create logical volume
   ansible.builtin.command:
     cmd: "lvcreate -y -l {{ common_storage_lv_size }} -n {{ common_storage_lv_name }} {{ common_storage_vg_name }}"
-  when: common_storage_lv_check.rc != 0
+  when:
+    - common_storage_setup_enabled | bool
+    - common_storage_lv_check is defined
+    - common_storage_lv_check.rc != 0
 
 - name: Detect filesystem on logical volume
   ansible.builtin.command:
@@ -106,11 +189,15 @@
   register: common_storage_lv_fs_check
   changed_when: false
   failed_when: false
+  when: common_storage_setup_enabled | bool
 
 - name: Create filesystem on logical volume
   ansible.builtin.command:
     cmd: "mkfs.{{ common_storage_fs_type }} /dev/{{ common_storage_vg_name }}/{{ common_storage_lv_name }}"
-  when: (common_storage_lv_fs_check.stdout | trim) | length == 0
+  when:
+    - common_storage_setup_enabled | bool
+    - common_storage_lv_fs_check is defined
+    - (common_storage_lv_fs_check.stdout | trim) | length == 0
 
 - name: Ensure workspace mount point exists
   ansible.builtin.file:
@@ -119,6 +206,7 @@
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "{{ common_storage_mount_mode }}"
+  when: common_storage_setup_enabled | bool
 
 - name: Mount workspace filesystem and persist in fstab
   ansible.posix.mount:
@@ -128,3 +216,4 @@
     opts: "{{ common_storage_mount_options }}"
     state: mounted
     backup: true
+  when: common_storage_setup_enabled | bool

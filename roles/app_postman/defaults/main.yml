@@ -1,6 +1,6 @@
 ---
-app_postman_package_dir: /opt/devmachine/packages
-app_postman_install_dir: /opt/Postman
+app_postman_package_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/packages"
+app_postman_install_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/Postman"
 app_postman_executable_name: Postman
 app_postman_symlink: /usr/local/bin/postman
 app_postman_desktop_entry: /usr/share/applications/postman.desktop
