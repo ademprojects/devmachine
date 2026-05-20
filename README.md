@@ -185,12 +185,13 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
   ```
 
   Die Clones laufen **nicht** während des Ansible-Runs, sondern beim ersten
-  User-Login. Die Rolle deployed `~/.local/bin/devmachine-clone-repos.sh` plus
-  einen Autostart-Eintrag (`~/.config/autostart/devmachine-clone-repos.desktop`);
-  beim Login lädt das Script den passphrase-encrypted Key via `ssh-add` in den
-  gnome-keyring-Agent (eine GUI-Askpass-Abfrage), klont alle Repos und löscht
-  Autostart + sich selbst, sobald jedes `target` ein Git-Working-Tree ist.
-  Log: `~/.local/state/devmachine-clone-repos.log`.
+  User-Login (XFCE-Session via xrdp). Die Rolle deployed `~/.local/bin/devmachine-clone-repos.sh`
+  plus einen XDG-Autostart-Eintrag (`~/.config/autostart/devmachine-clone-repos.desktop`,
+  von `xfce4-session` honoriert); beim Login lädt das Script den passphrase-encrypted Key via
+  `ssh-add` in den gnome-keyring-Agent (`openssh-askpass`-GUI-Prompt), klont alle Repos und
+  löscht Autostart + sich selbst, sobald jedes `target` ein Git-Working-Tree ist.
+  Log: `~/.local/state/devmachine-clone-repos.log`. (`gnome-keyring` ist trotz Name
+  DE-agnostisch und läuft unter XFCE genauso.)
 
   **IDE-Bootstrap.** Zusätzlich werden zwei Dateien aus `app_git_repos`
   abgeleitet (beide mit `force: false`, also nur Erstanlage — zum Refresh

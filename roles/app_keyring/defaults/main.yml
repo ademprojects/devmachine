@@ -1,9 +1,16 @@
 ---
 app_keyring_packages:
+  # gnome-keyring is the keyring daemon (DE-agnostic, despite the name).
+  # seahorse + libsecret + gcr give the GUI / DBus integration that XFCE
+  # uses just like GNOME. openssh-askpass provides the GUI passphrase
+  # prompt that ssh-add triggers from the autostart clone script.
+  # libnotify makes notify-send available for clone-script status popups.
   - gnome-keyring
   - seahorse
   - libsecret
   - gcr
+  - openssh-askpass
+  - libnotify
 app_keyring_pam_targets:
   - xrdp-sesman
   - sshd
