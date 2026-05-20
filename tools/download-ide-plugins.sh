@@ -65,8 +65,12 @@ VSCODE_EXTENSIONS=(
 #   12559   # Rainbow Brackets — color-coded bracket pairs
 #   7495    # .ignore — improved .gitignore / .dockerignore support
 #   18116   # GitHub Copilot — AI completion (subscription required)
-#   25859   # CI Aid for GitLab — job navigation, includes resolution on top of bundled GitLab plugin
-INTELLIJ_PLUGINS=()
+INTELLIJ_PLUGINS=(
+  13389   # Conventional Commit — commit message template + validation
+  15075   # JPA Buddy — JPA/Hibernate entity + repository generation, DDL diff
+  25859   # CI Aid for GitLab — job navigation, includes resolution on top of bundled GitLab plugin
+  23695   # WireMock — API simulation, stub management, WireMock Cloud integration
+)
 
 # Optional: pin IntelliJ build for compatibility filter (leave empty for latest).
 # Example: "IIC-262.7321" (IntelliJ IDEA Community 2026.1.2 build).
