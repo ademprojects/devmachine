@@ -1,0 +1,116 @@
+---
+- name: Discover bundled Go tarball in role files
+  ansible.builtin.set_fact:
+    app_go_tarball_files: >-
+      {{ query('fileglob', role_path ~ '/files/go*.linux-amd64.tar.gz')
+         | map('basename') | sort | list }}
+
+- name: Fail when no Go tarball is bundled
+  ansible.builtin.fail:
+    msg: >-
+      No Go tarball found in roles/app_go/files/.
+      Run `tools/download-tools.sh` on the controller to fetch it.
+  when: app_go_tarball_files | length == 0
+  run_once: true
+
+- name: Fail when more than one Go tarball is bundled
+  ansible.builtin.fail:
+    msg: >-
+      Multiple Go tarballs found in roles/app_go/files/
+      ({{ app_go_tarball_files | join(', ') }}). Keep only one.
+  when: app_go_tarball_files | length > 1
+  run_once: true
+
+- name: Derive Go version from tarball name
+  ansible.builtin.set_fact:
+    app_go_version: >-
+      {{ app_go_tarball_files[0] | regex_replace('\\.linux-amd64\\.tar\\.gz$', '') }}
+
+- name: Ensure Go install base directory exists
+  ansible.builtin.file:
+    path: "{{ app_go_install_base }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure versioned Go install directory exists
+  ansible.builtin.file:
+    path: "{{ app_go_install_base }}/{{ app_go_version }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Extract Go tarball into versioned directory
+  ansible.builtin.unarchive:
+    src: "{{ app_go_tarball_files[0] }}"
+    dest: "{{ app_go_install_base }}/{{ app_go_version }}"
+    extra_opts:
+      - --strip-components=1
+    owner: root
+    group: root
+    creates: "{{ app_go_install_base }}/{{ app_go_version }}/bin/go"
+
+- name: Find existing Go installs (for cleanup of stale versions)
+  ansible.builtin.find:
+    paths: "{{ app_go_install_base }}"
+    file_type: directory
+    patterns: "go*"
+    recurse: false
+  register: app_go_existing_dirs
+
+- name: Remove stale Go versions (not matching the currently bundled tarball)
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ app_go_existing_dirs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: (item.path | basename) != app_go_version
+
+- name: Point "current" symlink at the active Go version
+  ansible.builtin.file:
+    src: "{{ app_go_install_base }}/{{ app_go_version }}"
+    dest: "{{ app_go_install_base }}/current"
+    state: link
+    force: true
+    owner: root
+    group: root
+
+- name: Symlink go CLI into /usr/local/bin
+  ansible.builtin.file:
+    src: "{{ app_go_install_base }}/current/bin/go"
+    dest: "{{ app_go_symlink }}"
+    state: link
+    force: true
+
+- name: Symlink gofmt CLI into /usr/local/bin
+  ansible.builtin.file:
+    src: "{{ app_go_install_base }}/current/bin/gofmt"
+    dest: "{{ app_go_gofmt_symlink }}"
+    state: link
+    force: true
+
+- name: Ensure GOPATH directory exists for vm_owner
+  ansible.builtin.file:
+    path: "{{ app_go_gopath }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Write Go shell init to /etc/profile.d
+  ansible.builtin.copy:
+    dest: "{{ app_go_profile_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      if [ -d "{{ app_go_install_base }}/current/bin" ]; then
+        export GOROOT="{{ app_go_install_base }}/current"
+        export GOPATH="{{ app_go_gopath }}"
+        export GOPROXY="{{ app_go_proxy_url }}"
+        export GOSUMDB="{{ app_go_sumdb }}"
+        export PATH="$GOROOT/bin:$GOPATH/bin:$PATH"
+      fi

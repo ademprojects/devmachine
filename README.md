@@ -234,9 +234,13 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
   (`pyenv/pyenv` latest Release) und landet als `roles/app_pyenv/files/pyenv-<ver>.tar.gz`.
   Die Rolle macht Auto-Discovery per glob `pyenv-*.tar.gz` und failt klar wenn 0 oder >1 Files
   da sind (gleiches Pattern wie Postman/Nextcloud/KeePassXC).
-- `app_pyenv_python_version` — zu installierende Python-Version (Default `3.14.5`). Leer = automatische
-  Auflösung der höchsten 3.x.y aus `pyenv install --list`.
-- `app_pyenv_python_build_mirror_url` — Python-Source-Tarball-Mirror auf Nexus.
+- `app_pyenv_python_versions` — Liste der zu installierenden Python-Versionen
+  (Default `["3.14.5", "3.12.13"]`). Jedes `Python-<ver>.tar.xz` muss in `files/` liegen
+  (download-tools.sh holt das); die Rolle assertet das vor dem Build und legt die Tarballs
+  in `${PYENV_ROOT}/cache/` ab, damit `pyenv install` keine Netzwerk-Fetches macht.
+- `app_pyenv_python_default` — welche der Versionen `pyenv global` setzt (Default `3.14.5`).
+- `app_pyenv_python_build_mirror_url` — Fallback-Mirror für `pyenv install` falls Cache miss
+  (default zeigt auf Nexus, wird aber nicht erreicht solange der Cache vorgeladen ist).
 - `app_pyenv_pip_index_url` — pip-Index für `~vm_owner/.pip/pip.conf` (Default = `devmachine_pip_index_url`).
 - `app_pyenv_build_dependencies` — Pakete für `pyenv install` (gcc, make, *-devel).
 - `app_pyenv_proxy_url` — HTTP/HTTPS-Proxy für den `pyenv install`-Lauf (Default = `devmachine_proxy_url`).
@@ -264,21 +268,27 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 
 `app_nvm`-Rolle:
 
-- `app_nvm_version` — nvm-Tag (Default `0.40.4`).
-- `app_nvm_archive_url` — Nexus-Pfad zum nvm-Tarball (Default leitet sich aus `app_nvm_version` ab).
-- `app_nvm_node_version` — zu installierende Node-Version (Default `v24.15.0`). `--lts` bewirkt
-  „latest LTS" via nvm-Resolver.
+- nvm-Tarball + Node-Binaries werden auf dem Controller per `tools/download-tools.sh` aus
+  GitHub bzw. nodejs.org gezogen und landen in `roles/app_nvm/files/` als `nvm-<ver>.tar.gz`,
+  `node-<ver>-linux-x64.tar.xz` und `node-<ver>-SHASUMS256.txt`. Die Rolle macht Auto-Discovery
+  per glob.
+- `app_nvm_node_versions` — Liste der zu installierenden Node-Versionen
+  (Default `[v24.15.0, v22.22.3]`, beide LTS). Jeder Eintrag muss als Binary + SHASUMS in
+  `files/` liegen.
+- `app_nvm_node_default` — welche der Versionen `nvm alias default` setzt (Default `v24.15.0`).
+- `app_nvm_nodejs_mirror_url` — `NVM_NODEJS_ORG_MIRROR`-Wert. Default ist eine `file://`-URL
+  auf das lokal aufgebaute Mirror unter `{{ install_dir }}/nodejs-dist/<ver>/` — so läuft
+  `nvm install` ohne Netzwerk-Fetch (weder Nexus noch nodejs.org).
 - `app_nvm_set_default` — Default-Alias über `nvm alias default` setzen.
-- `app_nvm_nodejs_mirror_url` — Node-Tarball-Mirror auf Nexus.
 - `app_nvm_npm_registry_url` — npm-Registry für `~vm_owner/.npmrc` (Default = `devmachine_npm_registry_url`).
-- `app_nvm_proxy_url` — HTTP/HTTPS-Proxy für den `nvm install`-Lauf.
+- `app_nvm_proxy_url` — HTTP/HTTPS-Proxy für ad-hoc-Fetches (wird mit file://-Mirror nicht benötigt).
 - `app_nvm_install_subdir`, `app_nvm_profile_path` — Verzeichnis und Profile-Snippet.
 
 `common_nexus`-Rolle (Foundation — alle anderen Rollen referenzieren die Variablen):
 
 - `devmachine_nexus_fqdn` / `devmachine_nexus_scheme` / `devmachine_nexus_repository_path` — Nexus-Endpoint.
 - `devmachine_proxy_fqdn` / `devmachine_proxy_port` / `devmachine_proxy_scheme` — HTTP-Proxy.
-- `devmachine_nexus_base_url`, `devmachine_proxy_url` — aus obigen abgeleitet.
+- `nexus_url`, `devmachine_proxy_url` — aus obigen abgeleitet.
 - `devmachine_dnf_repo_*` — Konfiguration des Nexus-DNF-Repos (Name, URL, GPG).
 - `devmachine_npm_registry_url`, `devmachine_pip_index_url`, `devmachine_pyenv_mirror_url` — Mirror-URLs.
 - `common_nexus_profile_path` (Default `/etc/profile.d/devmachine-nexus.sh`), `common_nexus_no_proxy`
@@ -405,7 +415,7 @@ pyenv + Python (rolle `app_pyenv`):
   `~vm_owner/.pyenv` mit `--strip-components=1`.
 - Schreibt `/etc/profile.d/app-pyenv.sh` (setzt `PYENV_ROOT`, `PATH`, `PYTHON_BUILD_MIRROR_URL`,
   führt `pyenv init` aus, sobald der User einloggt).
-- Installiert `app_pyenv_python_version` (Default `3.14.5`) idempotent via `pyenv install --skip-existing`
+- Installiert `app_pyenv_python_versions` (Default `[3.14.5, 3.12.13]`) idempotent via `pyenv install --skip-existing`
   unter Nutzung des Nexus-Python-Source-Mirrors und des konfigurierten HTTP/HTTPS-Proxys.
 - Setzt die installierte Version per `pyenv global` als Default für `vm_owner[0]`.
 
@@ -434,7 +444,7 @@ nvm + Node.js (rolle `app_nvm`):
 
 - Lädt nvm-Tarball aus dem Nexus (Default `raw/nvm/nvm-0.40.4.tar.gz`), entpackt nach `~vm_owner/.nvm`.
 - Schreibt `/etc/profile.d/app-nvm.sh` (setzt `NVM_DIR`, `NVM_NODEJS_ORG_MIRROR`, sourct `nvm.sh`).
-- Installiert `app_nvm_node_version` (Default `v24.15.0`) per `nvm install` mit Nexus-Mirror + Proxy.
+- Installiert `app_nvm_node_versions` (Default `[v24.15.0, v22.22.3]`) per `nvm install` über das lokal aufgebaute `file://`-Mirror.
 - Setzt die Version per `nvm alias default` als Default für `vm_owner[0]`.
 
 Podman rootless:

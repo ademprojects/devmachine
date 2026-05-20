@@ -1,4 +1,23 @@
 ---
+- name: Discover bundled Maven tarballs in role files
+  ansible.builtin.set_fact:
+    app_maven_tarball_files: >-
+      {{ query('fileglob', role_path ~ '/files/apache-maven-*-bin.tar.gz')
+         | map('basename') | sort | list }}
+
+- name: Assert every requested Maven version is bundled
+  ansible.builtin.assert:
+    that:
+      - ('apache-maven-' ~ item ~ '-bin.tar.gz') in app_maven_tarball_files
+    fail_msg: >-
+      apache-maven-{{ item }}-bin.tar.gz not in roles/app_maven/files/.
+      Run `MAVEN_VERSIONS="{{ app_maven_versions | join(' ') }}" tools/download-tools.sh`
+      on the controller. Bundled tarballs:
+      {{ app_maven_tarball_files | join(', ') | default('none', true) }}.
+  loop: "{{ app_maven_versions }}"
+  loop_control:
+    label: "{{ item }}"
+
 - name: Ensure Maven install base directory exists
   ansible.builtin.file:
     path: "{{ app_maven_install_base }}"
@@ -7,21 +26,59 @@
     group: root
     mode: "0755"
 
-- name: Download and extract Maven from Nexus
+- name: Extract each Maven version into its versioned dir
   ansible.builtin.unarchive:
-    src: "{{ app_maven_archive_url }}"
+    src: "apache-maven-{{ item }}-bin.tar.gz"
     dest: "{{ app_maven_install_base }}"
-    remote_src: true
     owner: root
     group: root
-    creates: "{{ app_maven_install_base }}/apache-maven-{{ app_maven_version }}/bin/mvn"
+    creates: "{{ app_maven_install_base }}/apache-maven-{{ item }}/bin/mvn"
+  loop: "{{ app_maven_versions }}"
+  loop_control:
+    label: "{{ item }}"
 
-- name: Symlink mvn launcher
+- name: Find existing Maven installs (for cleanup of stale versions)
+  ansible.builtin.find:
+    paths: "{{ app_maven_install_base }}"
+    file_type: directory
+    patterns: "apache-maven-*"
+    recurse: false
+  register: app_maven_existing_dirs
+
+- name: Remove stale Maven versions (not in app_maven_versions)
   ansible.builtin.file:
-    src: "{{ app_maven_install_base }}/apache-maven-{{ app_maven_version }}/bin/mvn"
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ app_maven_existing_dirs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: (item.path | basename | regex_replace('^apache-maven-', '')) not in app_maven_versions
+
+- name: Point "current" symlink at the default Maven version
+  ansible.builtin.file:
+    src: "{{ app_maven_install_base }}/apache-maven-{{ app_maven_default_version }}"
+    dest: "{{ app_maven_install_base }}/current"
+    state: link
+    force: true
+    owner: root
+    group: root
+
+- name: Symlink mvn launcher (active default)
+  ansible.builtin.file:
+    src: "{{ app_maven_install_base }}/current/bin/mvn"
     dest: "{{ app_maven_symlink }}"
     state: link
     force: true
+
+- name: Symlink per-version mvn launchers (mvn-3.9.16, mvn-3.9.12, ...)
+  ansible.builtin.file:
+    src: "{{ app_maven_install_base }}/apache-maven-{{ item }}/bin/mvn"
+    dest: "/usr/local/bin/mvn-{{ item }}"
+    state: link
+    force: true
+  loop: "{{ app_maven_versions }}"
+  loop_control:
+    label: "mvn-{{ item }}"
 
 - name: Write Maven shell init to /etc/profile.d
   ansible.builtin.copy:
@@ -30,9 +87,11 @@
     group: root
     mode: "0644"
     content: |
-      export M2_HOME="{{ app_maven_install_base }}/apache-maven-{{ app_maven_version }}"
-      export MAVEN_HOME="$M2_HOME"
-      export PATH="$M2_HOME/bin:$PATH"
+      if [ -d "{{ app_maven_install_base }}/current/bin" ]; then
+        export M2_HOME="{{ app_maven_install_base }}/current"
+        export MAVEN_HOME="$M2_HOME"
+        export PATH="$M2_HOME/bin:$PATH"
+      fi
 
 - name: Ensure ~vm_owner/.m2 exists
   ansible.builtin.file:

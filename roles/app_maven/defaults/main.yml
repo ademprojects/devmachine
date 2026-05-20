@@ -1,12 +1,25 @@
 ---
-app_maven_version: "3.9.16"
-app_maven_archive_url: "{{ devmachine_nexus_base_url }}/raw/maven/apache-maven-{{ app_maven_version }}-bin.tar.gz"
-app_maven_install_base: /opt
+# Maven tarballs are fetched on the controller by tools/download-tools.sh
+# and land in roles/app_maven/files/ as apache-maven-<ver>-bin.tar.gz.
+# The role auto-discovers them, extracts each into a versioned dir, and
+# points a "current" symlink at the active default version.
+#
+# Keep app_maven_versions in sync with MAVEN_VERSIONS in download-tools.sh.
+app_maven_versions:
+  - "3.9.16"
+  - "3.9.12"
+app_maven_default_version: "3.9.16"
+
+app_maven_install_base: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/maven"
+# /usr/local/bin/mvn -> {{ install_base }}/current/bin/mvn (active default).
+# Per-version launchers /usr/local/bin/mvn-<ver> let you call a specific
+# version explicitly: `mvn-3.9.12 -version`.
 app_maven_symlink: /usr/local/bin/mvn
 app_maven_profile_path: /etc/profile.d/app-maven.sh
-app_maven_nexus_repository: "{{ devmachine_nexus_base_url }}/maven-public/"
+
+app_maven_nexus_repository: "{{ nexus_url }}/public/"
 app_maven_proxy_host: "{{ devmachine_proxy_fqdn }}"
 app_maven_proxy_port: "{{ devmachine_proxy_port }}"
 app_maven_non_proxy_hosts: "localhost|127.0.0.1"
 # Maven local repository on the data disk (avoids filling /home with build artifacts).
-app_maven_local_repository: "{{ common_storage_mount_point | default('/mnt/data') }}/maven/{{ vm_owner_name }}/repository"
+app_maven_local_repository: "{{ common_storage_mount_point | default('/mnt/data') }}/maven/repository"

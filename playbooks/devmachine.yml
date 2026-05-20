@@ -28,4 +28,5 @@
     - role: app_pyenv
     - role: app_nvm
     - role: app_maven
+    - role: app_go
     - role: app_git

@@ -56,7 +56,7 @@
 
 - name: Ensure podman storage directory for vm_owner exists
   ansible.builtin.file:
-    path: "{{ app_podman_storage_base }}/{{ vm_owner_name }}/storage"
+    path: "{{ app_podman_storage_base }}/user/storage"
     state: directory
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
@@ -121,7 +121,7 @@
     content: |
       [storage]
       driver = "{{ app_podman_storage_driver }}"
-      graphroot = "{{ app_podman_storage_base }}/{{ vm_owner_name }}/storage"
+      graphroot = "{{ app_podman_storage_base }}/user/storage"
 
       [storage.options]
       mount_program = "{{ app_podman_storage_mount_program }}"

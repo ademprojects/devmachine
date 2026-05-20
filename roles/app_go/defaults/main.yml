@@ -1,0 +1,20 @@
+---
+# Go toolchain tarball is fetched on the controller by tools/download-tools.sh
+# and lands in roles/app_go/files/ as go<ver>.linux-amd64.tar.gz. The role
+# auto-discovers it, parses the version from the filename, and extracts to
+# {{ app_go_install_base }}/<version>/, with a "current" symlink pointing at
+# the active version. Stale versioned dirs that no longer match a bundled
+# tarball get removed.
+app_go_install_base: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/go"
+app_go_symlink: /usr/local/bin/go
+app_go_gofmt_symlink: /usr/local/bin/gofmt
+app_go_profile_path: /etc/profile.d/app-go.sh
+# GOPATH (Go module cache + `go install` binaries). On the data disk so it
+# doesn't fill the 16 GB OS disk.
+app_go_gopath: "{{ common_storage_mount_point | default('/mnt/data') }}/go"
+# GOPROXY → Nexus go module proxy. Override with comma-separated list if you
+# want a fallback (e.g. "{{ nexus_url }}/golang/,direct").
+app_go_proxy_url: "{{ nexus_url }}/golang/"
+# GOSUMDB: "off" when using a private proxy that doesn't mirror sum.golang.org.
+# Set to "sum.golang.org" if you want public-checksum verification (needs net).
+app_go_sumdb: "off"

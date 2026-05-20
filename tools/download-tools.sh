@@ -14,7 +14,10 @@ POSTMAN_DIR="$REPO_ROOT/roles/app_postman/files"
 NEXTCLOUD_DIR="$REPO_ROOT/roles/app_nextcloud/files"
 KEEPASSXC_DIR="$REPO_ROOT/roles/app_keepassxc/files"
 PYENV_DIR="$REPO_ROOT/roles/app_pyenv/files"
-mkdir -p "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR"
+NVM_DIR="$REPO_ROOT/roles/app_nvm/files"
+GO_DIR="$REPO_ROOT/roles/app_go/files"
+MAVEN_DIR="$REPO_ROOT/roles/app_maven/files"
+mkdir -p "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR" "$NVM_DIR" "$GO_DIR" "$MAVEN_DIR"
 
 curl_opts=( --fail --location --retry 3 --connect-timeout 15 --show-error )
 
@@ -127,13 +130,89 @@ curl "${curl_opts[@]}" \
   "https://github.com/pyenv/pyenv/archive/refs/tags/${PYENV_TAG}.tar.gz"
 assert_nonempty "$PYENV_DIR/$PYENV_FILE" "pyenv $PYENV_VER"
 
-PYTHON_VERSION="${PYTHON_VERSION:-3.14.5}"
-PYTHON_FILE="Python-${PYTHON_VERSION}.tar.xz"
-echo ">>> Downloading CPython ${PYTHON_VERSION} source tarball"
+# Bundle every CPython line the devmachine ships. Override via env:
+# `PYTHON_VERSIONS="3.14.5 3.12.13" tools/download-tools.sh`
+read -ra PYTHON_VERSIONS <<< "${PYTHON_VERSIONS:-3.14.5 3.12.13}"
+for pyver in "${PYTHON_VERSIONS[@]}"; do
+  py_file="Python-${pyver}.tar.xz"
+  echo ">>> Downloading CPython ${pyver} source tarball"
+  curl "${curl_opts[@]}" \
+    --output "$PYENV_DIR/$py_file" \
+    "https://www.python.org/ftp/python/${pyver}/${py_file}"
+  assert_nonempty "$PYENV_DIR/$py_file" "Python ${pyver}"
+done
+
+# ---- nvm + Node binaries --------------------------------------------------
+# nvm is a shell tool — not on the npm registry, not on PyPI. The role uses
+# Auto-Discovery and serves the Node binaries via a local file:// mirror,
+# so neither the Nexus raw repo for nvm nor the Nexus nodejs-dist mirror is
+# required at provisioning time. Keep NODE_VERSIONS in sync with
+# app_nvm_node_versions in roles/app_nvm/defaults/main.yml.
+
+echo ">>> Cleaning previous nvm files in $NVM_DIR"
+cleanup_dir "$NVM_DIR"
+
+NVM_TAG="$(github_latest_tag nvm-sh/nvm)" || exit 1
+NVM_VER="${NVM_TAG#v}"
+NVM_FILE="nvm-${NVM_VER}.tar.gz"
+echo ">>> Downloading nvm ${NVM_VER}"
 curl "${curl_opts[@]}" \
-  --output "$PYENV_DIR/$PYTHON_FILE" \
-  "https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_FILE}"
-assert_nonempty "$PYENV_DIR/$PYTHON_FILE" "Python $PYTHON_VERSION"
+  --output "$NVM_DIR/$NVM_FILE" \
+  "https://github.com/nvm-sh/nvm/archive/refs/tags/${NVM_TAG}.tar.gz"
+assert_nonempty "$NVM_DIR/$NVM_FILE" "nvm $NVM_VER"
+
+# Bundle every LTS line the devmachine ships. Override via env:
+# `NODE_VERSIONS="v24.15.0 v22.22.3" tools/download-tools.sh`
+read -ra NODE_VERSIONS <<< "${NODE_VERSIONS:-v24.15.0 v22.22.3}"
+for ver in "${NODE_VERSIONS[@]}"; do
+  node_file="node-${ver}-linux-x64.tar.xz"
+  shasums_file="node-${ver}-SHASUMS256.txt"
+  echo ">>> Downloading Node ${ver} (binary + SHASUMS256.txt)"
+  curl "${curl_opts[@]}" \
+    --output "$NVM_DIR/$node_file" \
+    "https://nodejs.org/dist/${ver}/node-${ver}-linux-x64.tar.xz"
+  assert_nonempty "$NVM_DIR/$node_file" "Node ${ver} binary"
+  curl "${curl_opts[@]}" \
+    --output "$NVM_DIR/$shasums_file" \
+    "https://nodejs.org/dist/${ver}/SHASUMS256.txt"
+  assert_nonempty "$NVM_DIR/$shasums_file" "Node ${ver} SHASUMS256.txt"
+done
+
+# ---- Go toolchain ---------------------------------------------------------
+# Pre-built Linux/amd64 tarball from go.dev. Override via env:
+# `GO_VERSION=1.25.10 tools/download-tools.sh`. Keep in sync with the
+# bundled version the role auto-discovers (no separate version var in
+# defaults — derived from the tarball filename).
+
+echo ">>> Cleaning previous Go files in $GO_DIR"
+cleanup_dir "$GO_DIR"
+
+GO_VERSION="${GO_VERSION:-1.26.3}"
+GO_FILE="go${GO_VERSION}.linux-amd64.tar.gz"
+echo ">>> Downloading Go ${GO_VERSION}"
+curl "${curl_opts[@]}" \
+  --output "$GO_DIR/$GO_FILE" \
+  "https://go.dev/dl/${GO_FILE}"
+assert_nonempty "$GO_DIR/$GO_FILE" "Go ${GO_VERSION}"
+
+# ---- Maven ---------------------------------------------------------------
+# Multi-version bundle from Apache archive (works for both current and older
+# releases). Override via env:
+# `MAVEN_VERSIONS="3.9.16 3.9.12" tools/download-tools.sh`. Keep in sync with
+# app_maven_versions in roles/app_maven/defaults/main.yml.
+
+echo ">>> Cleaning previous Maven files in $MAVEN_DIR"
+cleanup_dir "$MAVEN_DIR"
+
+read -ra MAVEN_VERSIONS <<< "${MAVEN_VERSIONS:-3.9.16 3.9.12}"
+for ver in "${MAVEN_VERSIONS[@]}"; do
+  mvn_file="apache-maven-${ver}-bin.tar.gz"
+  echo ">>> Downloading Maven ${ver}"
+  curl "${curl_opts[@]}" \
+    --output "$MAVEN_DIR/$mvn_file" \
+    "https://archive.apache.org/dist/maven/maven-3/${ver}/binaries/${mvn_file}"
+  assert_nonempty "$MAVEN_DIR/$mvn_file" "Maven ${ver}"
+done
 
 echo ""
 echo "Done."
@@ -150,6 +229,15 @@ echo ""
 echo "pyenv files:"
 ls -lh "$PYENV_DIR" | grep -Ev '^total|\.gitkeep' || true
 echo ""
+echo "nvm files:"
+ls -lh "$NVM_DIR" | grep -Ev '^total|\.gitkeep' || true
+echo ""
+echo "Go files:"
+ls -lh "$GO_DIR" | grep -Ev '^total|\.gitkeep' || true
+echo ""
+echo "Maven files:"
+ls -lh "$MAVEN_DIR" | grep -Ev '^total|\.gitkeep' || true
+echo ""
 echo "SHA256 (paste into host_vars / role defaults if pinning):"
-find "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR" -type f ! -name '.gitkeep' -print0 \
+find "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR" "$NVM_DIR" "$GO_DIR" "$MAVEN_DIR" -type f ! -name '.gitkeep' -print0 \
   | sort -z | xargs -0 -r sha256sum
