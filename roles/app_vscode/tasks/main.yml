@@ -79,3 +79,20 @@
   ansible.builtin.include_tasks: per_user.yml
   vars:
     app_vscode_target_user: "{{ vm_owner_name }}"
+
+- name: Ensure ~vm_owner/Desktop exists
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/Desktop"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Copy VS Code desktop entry to vm_owner's Desktop
+  ansible.builtin.copy:
+    src: /usr/share/applications/code.desktop
+    dest: "{{ vm_owner_home }}/Desktop/code.desktop"
+    remote_src: true
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"

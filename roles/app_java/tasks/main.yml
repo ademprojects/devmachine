@@ -25,14 +25,32 @@
       Expected /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk after installing
       java-{{ app_java_default_version }}-openjdk-devel.
 
+# alternatives expects the fully-versioned path that the JDK's RPM scriptlets
+# registered (e.g. /usr/lib/jvm/java-21-openjdk-21.0.5.0.10-1.el9.x86_64/bin/java),
+# not the unversioned /usr/lib/jvm/java-21-openjdk/bin/java symlink — passing
+# the symlink errors out with "has not been configured as an alternative".
+# Resolve it via readlink -f first.
+
+- name: Resolve absolute path of selected java binary
+  ansible.builtin.command:
+    cmd: "readlink -f /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk/bin/java"
+  register: app_java_target_java_bin
+  changed_when: false
+
+- name: Resolve absolute path of selected javac binary
+  ansible.builtin.command:
+    cmd: "readlink -f /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk/bin/javac"
+  register: app_java_target_javac_bin
+  changed_when: false
+
 - name: Set system default java to selected version
   ansible.builtin.command:
-    cmd: "alternatives --set java /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk/bin/java"
+    cmd: "alternatives --set java {{ app_java_target_java_bin.stdout }}"
   changed_when: false
 
 - name: Set system default javac to selected version
   ansible.builtin.command:
-    cmd: "alternatives --set javac /usr/lib/jvm/java-{{ app_java_default_version }}-openjdk/bin/javac"
+    cmd: "alternatives --set javac {{ app_java_target_javac_bin.stdout }}"
   changed_when: false
 
 - name: Write Java shell init to /etc/profile.d

@@ -105,3 +105,20 @@
       Terminal=false
       Categories=Development;Network;Utility;
       StartupWMClass=Postman
+
+- name: Ensure ~vm_owner/Desktop exists
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/Desktop"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Copy Postman desktop entry to vm_owner's Desktop
+  ansible.builtin.copy:
+    src: "{{ app_postman_desktop_entry }}"
+    dest: "{{ vm_owner_home }}/Desktop/{{ app_postman_desktop_entry | basename }}"
+    remote_src: true
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"

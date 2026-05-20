@@ -49,3 +49,20 @@
   ansible.builtin.file:
     path: /etc/yum.repos.d/google-chrome.repo
     state: absent
+
+- name: Ensure ~vm_owner/Desktop exists
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/Desktop"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Copy Chrome desktop entry to vm_owner's Desktop
+  ansible.builtin.copy:
+    src: /usr/share/applications/google-chrome.desktop
+    dest: "{{ vm_owner_home }}/Desktop/google-chrome.desktop"
+    remote_src: true
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"

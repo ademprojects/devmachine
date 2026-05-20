@@ -152,3 +152,79 @@
 - name: Report resolved IntelliJ data directory name
   ansible.builtin.debug:
     msg: "IntelliJ per-user config dir: ~/.config/JetBrains/{{ app_intellij_data_dir_name }}/"
+
+# JetBrains tarballs ship the launcher icon at <home>/bin/idea.{png,svg}. Drop
+# it into the hicolor theme so the .desktop Icon= name resolves consistently
+# in the XFCE menu + on the desktop.
+- name: Locate IntelliJ icons in extracted tarball
+  ansible.builtin.find:
+    paths: "{{ app_intellij_home }}/bin"
+    patterns: 'idea*.svg,idea*.png'
+    file_type: file
+  register: app_intellij_found_icons
+
+- name: Assert IntelliJ icon was discovered
+  ansible.builtin.assert:
+    that: app_intellij_found_icons.files | length > 0
+    fail_msg: "No idea*.png/idea*.svg found under {{ app_intellij_home }}/bin/ — tarball layout may have changed."
+
+- name: Pick IntelliJ icon source (SVG preferred, else largest PNG)
+  ansible.builtin.set_fact:
+    app_intellij_icon_src: >-
+      {{
+        (app_intellij_found_icons.files | selectattr('path', 'search', '\\.svg$') | list | first)
+        | default(app_intellij_found_icons.files | sort(attribute='size', reverse=true) | first)
+      }}
+
+- name: Install IntelliJ icon into hicolor theme
+  ansible.builtin.copy:
+    src: "{{ app_intellij_icon_src.path }}"
+    dest: >-
+      /usr/share/icons/hicolor/{{ 'scalable' if app_intellij_icon_src.path is search('\\.svg$') else '256x256' }}/apps/{{
+      app_intellij_desktop_icon }}.{{ 'svg' if app_intellij_icon_src.path is search('\\.svg$') else 'png' }}
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Refresh GTK icon cache for hicolor theme
+  ansible.builtin.command:
+    cmd: gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+  changed_when: false
+  failed_when: false
+
+- name: Write IntelliJ desktop entry
+  ansible.builtin.copy:
+    dest: "{{ app_intellij_desktop_entry }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=IntelliJ IDEA
+      GenericName=Java IDE
+      Comment=The Drive to Develop
+      Exec={{ app_intellij_symlink }} %f
+      Icon={{ app_intellij_desktop_icon }}
+      Terminal=false
+      Categories=Development;IDE;
+      StartupWMClass=jetbrains-idea
+      MimeType=application/x-java;
+
+- name: Ensure ~vm_owner/Desktop exists
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/Desktop"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Copy IntelliJ desktop entry to vm_owner's Desktop
+  ansible.builtin.copy:
+    src: "{{ app_intellij_desktop_entry }}"
+    dest: "{{ vm_owner_home }}/Desktop/{{ app_intellij_desktop_entry | basename }}"
+    remote_src: true
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
