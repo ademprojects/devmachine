@@ -217,3 +217,34 @@
     state: mounted
     backup: true
   when: common_storage_setup_enabled | bool
+
+# ---------------------------------------------------------------------------
+# Concern 3: relocate $TMPDIR onto the data disk (works around noexec /tmp).
+# ---------------------------------------------------------------------------
+
+- name: Ensure exec-allowed TMPDIR exists with sticky bit
+  ansible.builtin.file:
+    path: "{{ common_storage_tmpdir_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "1777"
+  when: common_storage_tmpdir_path | length > 0
+
+- name: Set TMPDIR system-wide via /etc/environment (PAM-loaded sessions)
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    regexp: '^TMPDIR='
+    line: "TMPDIR={{ common_storage_tmpdir_path }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  when: common_storage_tmpdir_path | length > 0
+
+- name: Remove TMPDIR override from /etc/environment when path is empty
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    regexp: '^TMPDIR='
+    state: absent
+  when: common_storage_tmpdir_path | length == 0

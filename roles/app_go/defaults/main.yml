@@ -18,3 +18,7 @@ app_go_proxy_url: "{{ nexus_url }}/golang/"
 # GOSUMDB: "off" when using a private proxy that doesn't mirror sum.golang.org.
 # Set to "sum.golang.org" if you want public-checksum verification (needs net).
 app_go_sumdb: "off"
+
+# Language server installed via `go install` (resolved through GOPROXY/Nexus).
+# Set to empty string to skip the install.
+app_go_gopls_module: "golang.org/x/tools/gopls@latest"

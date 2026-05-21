@@ -178,6 +178,30 @@
   changed_when: false
   when: app_nvm_set_default | bool
 
+# Enable Corepack — bundled with every Node >= 16.10 — so `yarn` and `pnpm`
+# are available without an explicit `npm install -g`. Corepack creates shim
+# binaries (yarn, pnpm) in the Node version's bin dir; on first `yarn`/`pnpm`
+# call it downloads the requested package-manager version from npm-registry
+# (via Nexus npm-proxy). Loop over every installed Node version because the
+# shims are per-version.
+- name: Enable Corepack for each installed Node version
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      . "{{ app_nvm_install_dir }}/nvm.sh"
+      nvm use {{ item }}
+      corepack enable
+  become: true
+  become_user: "{{ vm_owner_name }}"
+  environment:
+    HOME: "{{ vm_owner_home }}"
+    NVM_DIR: "{{ app_nvm_install_dir }}"
+  loop: "{{ app_nvm_node_versions }}"
+  loop_control:
+    label: "corepack enable for {{ item }}"
+  changed_when: false
+  when: app_nvm_corepack_enabled | bool
+
 - name: Configure npm registry to Nexus for vm_owner
   ansible.builtin.copy:
     dest: "{{ vm_owner_home }}/.npmrc"

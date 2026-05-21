@@ -18,8 +18,8 @@ app_maven_symlink: /usr/local/bin/mvn
 app_maven_profile_path: /etc/profile.d/app-maven.sh
 
 app_maven_nexus_repository: "{{ nexus_url }}/public/"
-app_maven_proxy_host: "{{ devmachine_proxy_fqdn }}"
-app_maven_proxy_port: "{{ devmachine_proxy_port }}"
+app_maven_proxy_host: "{{ proxy_fqdn }}"
+app_maven_proxy_port: "{{ proxy_port }}"
 app_maven_non_proxy_hosts: "localhost|127.0.0.1"
 # Maven local repository on the data disk (avoids filling /home with build artifacts).
 app_maven_local_repository: "{{ common_storage_mount_point | default('/mnt/data') }}/maven/repository"

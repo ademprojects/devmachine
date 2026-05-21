@@ -86,3 +86,34 @@
     block: |
       Host *
           AddKeysToAgent yes
+
+# Per-host ProxyCommand for git servers reachable only via HTTPS-CONNECT
+# tunnel (corp firewall blocks outbound port 22). socat -> Proxy -> Target:22.
+# Configure via vm_owner_ssh_proxy_hosts in host_vars or group_vars, e.g.:
+#   vm_owner_ssh_proxy_hosts:
+#     - host: gitlab.firma.intern
+#     - host: github.com
+#       hostname: ssh.github.com
+#       port: 443
+- name: Add ProxyCommand entries to ~/.ssh/config for hosts behind HTTPS proxy
+  vars:
+    ph: "{{ item.proxy_host | default(proxy_fqdn) }}"
+    pp: "{{ item.proxy_port | default(proxy_port) }}"
+  ansible.builtin.blockinfile:
+    path: "{{ vm_owner_home }}/.ssh/config"
+    create: true
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0600"
+    marker: "# {mark} ANSIBLE MANAGED — proxy {{ item.host }}"
+    block: |
+      Host {{ item.host }}
+          HostName {{ item.hostname | default(item.host) }}
+          Port {{ item.port | default(22) }}
+          User {{ item.user | default('git') }}
+          ProxyCommand socat - PROXY:{{ ph }}:%h:%p,proxyport={{ pp }}
+          IdentityFile ~/.ssh/{{ vm_owner_ssh_keyfilename }}
+          IdentitiesOnly yes
+  loop: "{{ vm_owner_ssh_proxy_hosts | default([]) }}"
+  loop_control:
+    label: "{{ item.host }}"

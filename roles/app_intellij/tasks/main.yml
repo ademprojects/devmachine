@@ -132,10 +132,55 @@
   ansible.builtin.set_fact:
     app_intellij_user_plugins_dir: "{{ vm_owner_home }}/.local/share/JetBrains/{{ app_intellij_data_dir_name | trim }}/plugins"
 
+- name: Resolve per-user IntelliJ config dir
+  ansible.builtin.set_fact:
+    app_intellij_user_config_dir: "{{ vm_owner_home }}/.config/JetBrains/{{ app_intellij_data_dir_name | trim }}"
+
 # ~/.local and ~/.cache are already symlinked to /mnt/data by app_workspace,
 # so JetBrains state (plugins under .local/share/JetBrains, indexes under
 # .cache/JetBrains) automatically lands on the data disk via those parent
 # symlinks. No JetBrains-specific symlinks needed here.
+
+# Offline-mode defaults: the devmachine has no outbound internet, so any
+# automated check IntelliJ makes against jetbrains.com / plugins.jetbrains.com
+# will fail and can stall the Remote Dev backend. idea.properties at the
+# per-user config path takes precedence over <IDE>/bin/idea.properties and
+# lets us bake the toggles in without touching the install tree.
+- name: Ensure per-user IntelliJ config dir exists
+  ansible.builtin.file:
+    path: "{{ app_intellij_user_config_dir }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Write offline-mode idea.properties for vm_owner
+  ansible.builtin.copy:
+    dest: "{{ app_intellij_user_config_dir }}/idea.properties"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"
+    content: |
+      # Managed by Ansible (roles/app_intellij). Offline-mode defaults.
+
+      # Skip "is there a newer IDE" check (no internet to update server).
+      ide.no.platform.update=true
+
+      # Skip license-server check (we use offline activation).
+      ide.no.licensee.update=true
+
+      # Don't try to fetch plugins from the marketplace at runtime — only
+      # use what's already in <IDE>/plugins and ~/.local/share/JetBrains/<ver>/plugins.
+      idea.plugins.host=
+
+      # Don't auto-download pre-built shared indexes from JetBrains' CDN.
+      shared.indexes.download.auto.consent=false
+      shared.indexes.download.consent=false
+
+      # Disable plugin advertiser ("install plugin X for this file type") —
+      # talks to marketplace.
+      plugin.advertiser.enable.update.notifications=false
+      plugin.advertiser.enable.suggestion=false
 
 - name: Discover IntelliJ plugin files in role files
   ansible.builtin.set_fact:

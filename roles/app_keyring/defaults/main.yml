@@ -15,3 +15,16 @@ app_keyring_pam_targets:
   - xrdp-sesman
   - sshd
 app_keyring_profile_path: /etc/profile.d/app-keyring-ssh.sh
+
+# List of git/SSH hosts that need ProxyCommand-via-socat because the corp
+# firewall blocks outbound port 22. Each entry is a dict with at least
+# `host:`; optional `hostname:`, `port:`, `user:`, `proxy_host:`,
+# `proxy_port:` (default to proxy_fqdn / proxy_port).
+# Empty = no proxy entries written.
+# Example for host_vars:
+#   vm_owner_ssh_proxy_hosts:
+#     - host: gitlab.firma.intern
+#     - host: github.com
+#       hostname: ssh.github.com
+#       port: 443
+vm_owner_ssh_proxy_hosts: []

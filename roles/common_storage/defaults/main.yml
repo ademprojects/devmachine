@@ -17,3 +17,12 @@ common_storage_fs_type: xfs
 common_storage_mount_point: /mnt/data
 common_storage_mount_mode: "0755"
 common_storage_mount_options: "defaults,noatime,nodiratime"
+
+# --- Concern 3: relocate $TMPDIR to the data disk.
+# RHEL hardening templates often mount /tmp as tmpfs with `noexec`, which
+# breaks every JVM-based tool (IntelliJ Gateway backend, python-build, …):
+# they extract native libs into tmp and dlopen them. Setting TMPDIR via
+# /etc/environment makes PAM-mediated sessions (including non-interactive
+# SSH, which Gateway uses) pick up a writable + exec-allowed temp dir on
+# /mnt/data instead. Set to "" to disable.
+common_storage_tmpdir_path: "{{ common_storage_mount_point }}/tmp"

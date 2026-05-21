@@ -4,12 +4,12 @@ devmachine_nexus_scheme: https
 devmachine_nexus_fqdn: nexus.example.com
 devmachine_nexus_repository_path: /repository
 devmachine_proxy_scheme: http
-devmachine_proxy_fqdn: proxy.example.com
-devmachine_proxy_port: 3128
+proxy_fqdn: proxy.example.com
+proxy_port: 3128
 
 # Derived endpoint URLs
 nexus_url: "{{ devmachine_nexus_scheme }}://{{ devmachine_nexus_fqdn }}{{ devmachine_nexus_repository_path }}"
-proxy_url: "{{ devmachine_proxy_scheme }}://{{ devmachine_proxy_fqdn }}:{{ devmachine_proxy_port }}"
+proxy_url: "{{ devmachine_proxy_scheme }}://{{ proxy_fqdn }}:{{ proxy_port }}"
 
 # Nexus-backed DNF repository
 devmachine_dnf_repo_name: nexus-rhel9-baseos

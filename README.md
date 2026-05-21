@@ -291,7 +291,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 `common_nexus`-Rolle (Foundation — alle anderen Rollen referenzieren die Variablen):
 
 - `devmachine_nexus_fqdn` / `devmachine_nexus_scheme` / `devmachine_nexus_repository_path` — Nexus-Endpoint.
-- `devmachine_proxy_fqdn` / `devmachine_proxy_port` / `devmachine_proxy_scheme` — HTTP-Proxy.
+- `proxy_fqdn` / `proxy_port` / `devmachine_proxy_scheme` — HTTP-Proxy.
 - `nexus_url`, `proxy_url` — aus obigen abgeleitet.
 - `devmachine_dnf_repo_*` — Konfiguration des Nexus-DNF-Repos (Name, URL, GPG).
 - `devmachine_npm_registry_url`, `devmachine_pip_index_url`, `devmachine_pyenv_mirror_url` — Mirror-URLs.
@@ -388,7 +388,7 @@ Run am „storage device not found"-Assert — dann `common_storage_setup_enable
 - `vm_owner` — Liste mit genau einem User, der den Workspace-Mount besitzt und für den die
   VS Code-Extensions installiert werden.
 
-Empfohlen: nur `devmachine_nexus_fqdn` und `devmachine_proxy_fqdn` pro Server setzen; die übrigen
+Empfohlen: nur `devmachine_nexus_fqdn` und `proxy_fqdn` pro Server setzen; die übrigen
 Nexus-/Proxy-URLs werden standardmäßig daraus abgeleitet.
 
 Passwordless sudo für `vm_owner[0]` ist **disabled by default**; setze `common_sudo_nopasswd: true`

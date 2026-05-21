@@ -114,3 +114,21 @@
         export GOSUMDB="{{ app_go_sumdb }}"
         export PATH="$GOROOT/bin:$GOPATH/bin:$PATH"
       fi
+
+# Install gopls (LSP server, recommended for IntelliJ/VS Code Go support)
+# for vm_owner. `go install` fetches through GOPROXY (Nexus) — needs the
+# golang module proxy to actually carry x/tools. Idempotent via creates:.
+- name: Install gopls language server for vm_owner
+  ansible.builtin.command:
+    cmd: "{{ app_go_install_base }}/current/bin/go install -v {{ app_go_gopls_module }}"
+    creates: "{{ app_go_gopath }}/bin/gopls"
+  become: true
+  become_user: "{{ vm_owner_name }}"
+  environment:
+    HOME: "{{ vm_owner_home }}"
+    GOROOT: "{{ app_go_install_base }}/current"
+    GOPATH: "{{ app_go_gopath }}"
+    GOPROXY: "{{ app_go_proxy_url }}"
+    GOSUMDB: "{{ app_go_sumdb }}"
+    PATH: "{{ app_go_install_base }}/current/bin:{{ app_go_gopath }}/bin:/usr/local/bin:/usr/bin:/bin"
+  when: app_go_gopls_module | length > 0

@@ -20,6 +20,7 @@ app_cli_packages:
   - tar
   - which
   - file
+  - socat  # used by ~/.ssh/config ProxyCommand for SSH-over-HTTPS-CONNECT
 app_cli_mosh_open_firewall: true
 app_cli_mosh_firewall_port_min: 60000
 app_cli_mosh_firewall_port_max: 61000
