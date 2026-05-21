@@ -70,6 +70,7 @@
     state: link
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
+    follow: false
     force: true
 
 - name: Write nvm shell init to /etc/profile.d

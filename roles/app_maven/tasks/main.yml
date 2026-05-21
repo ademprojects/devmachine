@@ -93,13 +93,42 @@
         export PATH="$M2_HOME/bin:$PATH"
       fi
 
-- name: Ensure ~vm_owner/.m2 exists
+# Symlink ~vm_owner/.m2 to the data-disk maven dir so settings.xml + the
+# default $HOME/.m2/repository convention both land on /mnt/data.
+- name: Ensure /mnt/data/maven exists for ~/.m2 symlink target
   ansible.builtin.file:
-    path: "{{ vm_owner_home }}/.m2"
+    path: "{{ common_storage_mount_point | default('/mnt/data') }}/maven"
     state: directory
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "0755"
+
+- name: Stat existing ~vm_owner/.m2 path
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/.m2"
+  register: app_maven_m2_stat
+
+- name: Refuse to clobber an existing real ~/.m2 directory
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/.m2 exists as a real directory. Move it to the
+      data disk and remove, then re-run:
+        rsync -a {{ vm_owner_home }}/.m2/ {{ common_storage_mount_point | default('/mnt/data') }}/maven/
+        rm -rf {{ vm_owner_home }}/.m2
+  when:
+    - app_maven_m2_stat.stat.exists
+    - app_maven_m2_stat.stat.isdir
+    - not app_maven_m2_stat.stat.islnk
+
+- name: Symlink ~vm_owner/.m2 to data-disk maven dir
+  ansible.builtin.file:
+    src: "{{ common_storage_mount_point | default('/mnt/data') }}/maven"
+    dest: "{{ vm_owner_home }}/.m2"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    follow: false
+    force: true
 
 - name: Ensure Maven local repository on data disk exists
   ansible.builtin.file:

@@ -28,4 +28,65 @@
     src: "{{ app_workspace_root }}"
     dest: "{{ vm_owner_home }}/{{ app_workspace_link_name }}"
     state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    follow: false
     force: true
+
+# Relocate XDG cache + data dirs to the data disk. Apps write tons of state
+# here: IDE indexes (GB-scale), pip wheels, npm metadata, browser thumbnails,
+# gnome-keyring transient files, user-installed binaries, .desktop files,
+# fonts, etc. Done in app_workspace because every later app_* role runs
+# after this, so the symlinks are in place before any write to ~/.cache or
+# ~/.local. Conceptually this is user-setup work; we do it idempotently in
+# the playbook because we don't own user creation (vm_owner exists already).
+
+- name: Ensure data-disk XDG dirs exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+  loop:
+    - "{{ common_storage_mount_point | default('/mnt/data') }}/cache"
+    - "{{ common_storage_mount_point | default('/mnt/data') }}/local"
+
+- name: Stat existing ~vm_owner XDG dirs
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/{{ item }}"
+  register: app_workspace_xdg_stat
+  loop:
+    - .cache
+    - .local
+
+- name: Refuse to clobber existing real ~/.cache or ~/.local directories
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/{{ item.item }} exists as a real directory
+      (contents from a prior interactive session or earlier provisioning).
+      Move it to the data disk and remove the directory, then re-run:
+        rsync -a {{ vm_owner_home }}/{{ item.item }}/ {{ common_storage_mount_point | default('/mnt/data') }}/{{ item.item | regex_replace('^\\.', '') }}/
+        rm -rf {{ vm_owner_home }}/{{ item.item }}
+  loop: "{{ app_workspace_xdg_stat.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - item.stat.exists
+    - item.stat.isdir
+    - not item.stat.islnk
+
+- name: Symlink ~vm_owner XDG dirs to data-disk
+  ansible.builtin.file:
+    src: "{{ common_storage_mount_point | default('/mnt/data') }}/{{ item.dest }}"
+    dest: "{{ vm_owner_home }}/{{ item.link }}"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    follow: false
+    force: true
+  loop:
+    - { link: .cache, dest: cache }
+    - { link: .local, dest: local }
+  loop_control:
+    label: "{{ item.link }} -> {{ item.dest }}"

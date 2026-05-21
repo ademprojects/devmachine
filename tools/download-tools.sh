@@ -214,31 +214,37 @@ for ver in "${MAVEN_VERSIONS[@]}"; do
 done
 
 # ---- VS Code (RPM + Remote-SSH server tarball) ----------------------------
-# Both fetched at "latest stable". The server tarball's redirect URL contains
-# the commit hash — we extract it and bake it into the filename so the role
-# can place the tarball at ~/.vscode-server/bin/<commit>/, which is where
-# VS Code Desktop looks for an already-installed server (no online fetch on
-# first Remote-SSH connect).
+# RPM (Linux desktop install via xrdp): defaults to latest stable —
+# unabhängig von der Windows-VS-Code-Version.
+# Server tarball (Remote-SSH from Windows): MUSS zur Windows-VS-Code-Version
+# passen — sonst lädt VS Code Desktop beim Connect den Server neu runter.
+# Auf Windows: `code --version` zeigt Version + 40-char commit.
+# Override via env:
+#   VSCODE_VERSION=latest         (Linux RPM)
+#   VSCODE_SERVER_VERSION=1.108.1 (matched to Windows)
 
 echo ">>> Cleaning previous VS Code files in $VSCODE_DIR"
 cleanup_dir "$VSCODE_DIR"
 
-echo ">>> Downloading latest VS Code Linux RPM"
-(cd "$VSCODE_DIR" && curl "${curl_opts[@]}" --remote-header-name --remote-name \
-  "https://update.code.visualstudio.com/latest/linux-rpm-x64/stable")
-vscode_rpm=$(newest_in "$VSCODE_DIR")
-assert_nonempty "$vscode_rpm" "VS Code RPM"
+VSCODE_VERSION="${VSCODE_VERSION:-latest}"
+VSCODE_SERVER_VERSION="${VSCODE_SERVER_VERSION:-1.108.1}"
 
-echo ">>> Resolving VS Code Server commit (latest stable)"
-server_final_url=$(curl -sIL "https://update.code.visualstudio.com/latest/server-linux-x64/stable" \
+echo ">>> Downloading VS Code ${VSCODE_VERSION} Linux RPM"
+(cd "$VSCODE_DIR" && curl "${curl_opts[@]}" --remote-header-name --remote-name \
+  "https://update.code.visualstudio.com/${VSCODE_VERSION}/linux-rpm-x64/stable")
+vscode_rpm=$(newest_in "$VSCODE_DIR")
+assert_nonempty "$vscode_rpm" "VS Code ${VSCODE_VERSION} RPM"
+
+echo ">>> Resolving VS Code Server commit for ${VSCODE_SERVER_VERSION}"
+server_final_url=$(curl -sIL "https://update.code.visualstudio.com/${VSCODE_SERVER_VERSION}/server-linux-x64/stable" \
   | awk 'tolower($1)=="location:" {print $2}' | tail -1 | tr -d '\r')
 vscode_commit=$(echo "$server_final_url" | grep -oE '[a-f0-9]{40}' | head -1)
 [[ -n "$vscode_commit" ]] || { echo "ERROR: could not extract VS Code Server commit from $server_final_url" >&2; exit 1; }
-echo ">>> Downloading VS Code Server (commit ${vscode_commit})"
+echo ">>> Downloading VS Code Server ${VSCODE_SERVER_VERSION} (commit ${vscode_commit})"
 curl "${curl_opts[@]}" \
   --output "$VSCODE_DIR/vscode-server-linux-x64-${vscode_commit}.tar.gz" \
   "$server_final_url"
-assert_nonempty "$VSCODE_DIR/vscode-server-linux-x64-${vscode_commit}.tar.gz" "VS Code Server"
+assert_nonempty "$VSCODE_DIR/vscode-server-linux-x64-${vscode_commit}.tar.gz" "VS Code Server ${VSCODE_SERVER_VERSION}"
 
 echo ""
 echo "Done."

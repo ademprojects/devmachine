@@ -197,4 +197,5 @@
     state: link
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
+    follow: false
     force: true

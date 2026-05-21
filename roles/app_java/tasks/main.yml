@@ -64,3 +64,40 @@
         export JAVA_HOME=/usr/lib/jvm/java-{{ app_java_default_version }}-openjdk
         export PATH="$JAVA_HOME/bin:$PATH"
       fi
+
+# Symlink ~vm_owner/.java to the data-disk so JNI native caches +
+# user preferences (~/.java/.userPrefs/) land off the OS disk.
+- name: Ensure /mnt/data/java exists for ~/.java symlink target
+  ansible.builtin.file:
+    path: "{{ common_storage_mount_point | default('/mnt/data') }}/java"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Stat existing ~vm_owner/.java path
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/.java"
+  register: app_java_dotjava_stat
+
+- name: Refuse to clobber an existing real ~/.java directory
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/.java exists as a real directory. Move it to the
+      data disk and remove, then re-run:
+        rsync -a {{ vm_owner_home }}/.java/ {{ common_storage_mount_point | default('/mnt/data') }}/java/
+        rm -rf {{ vm_owner_home }}/.java
+  when:
+    - app_java_dotjava_stat.stat.exists
+    - app_java_dotjava_stat.stat.isdir
+    - not app_java_dotjava_stat.stat.islnk
+
+- name: Symlink ~vm_owner/.java to data-disk java dir
+  ansible.builtin.file:
+    src: "{{ common_storage_mount_point | default('/mnt/data') }}/java"
+    dest: "{{ vm_owner_home }}/.java"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    follow: false
+    force: true
