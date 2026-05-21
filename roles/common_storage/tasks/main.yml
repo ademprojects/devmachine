@@ -206,6 +206,8 @@
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "{{ common_storage_mount_mode }}"
+    setype: "{{ common_storage_mount_setype }}"
+    seuser: "{{ common_storage_mount_seuser }}"
   when: common_storage_setup_enabled | bool
 
 - name: Mount workspace filesystem and persist in fstab

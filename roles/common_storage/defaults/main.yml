@@ -17,6 +17,14 @@ common_storage_fs_type: xfs
 common_storage_mount_point: /mnt/data
 common_storage_mount_mode: "0755"
 common_storage_mount_options: "defaults,noatime,nodiratime"
+# SELinux context for the mount point root. mkfs.xfs leaves the new FS root
+# with `unlabeled_t`; without an explicit setype/seuser Ansible re-applies
+# the policy default every run, so the "Ensure workspace mount point" task
+# is forever "changed". xfs stores the SELinux context in xattr, so once
+# set explicitly the value is persistent. Defaults match `matchpathcon /mnt/data`
+# under the RHEL targeted policy — override if you point the mount somewhere else.
+common_storage_mount_setype: mnt_t
+common_storage_mount_seuser: system_u
 
 # --- Concern 3: relocate $TMPDIR to the data disk.
 # RHEL hardening templates often mount /tmp as tmpfs with `noexec`, which
