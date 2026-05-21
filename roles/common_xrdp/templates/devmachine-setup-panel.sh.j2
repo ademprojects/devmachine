@@ -1,8 +1,11 @@
 #!/bin/bash
+{% raw %}
 # Ansible-managed (roles/common_xrdp). Beim ersten Login ergänzt das die
 # untere XFCE-Leiste (panel-2) um Launcher für die wichtigsten Dev-Apps.
 # Sentinel verhindert mehrfaches Anhängen bei späteren Sessions; das Script
 # entfernt sich + den Autostart-Eintrag wenn der Sentinel sitzt.
+# Body in {% raw %} gewrappt, weil bash's array-length-Syntax ${#arr[@]}
+# sonst von Jinja als Comment-Start interpretiert wird.
 
 set -uo pipefail
 
@@ -71,3 +74,4 @@ xfce4-panel --restart >/dev/null 2>&1 || true
 touch "$SENTINEL"
 echo "done — removing autostart + self"
 rm -f "$AUTOSTART" "$SELF"
+{% endraw %}
