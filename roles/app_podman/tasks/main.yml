@@ -38,6 +38,11 @@
 
 # ---- Container storage relocated to /mnt/data ----
 
+# SELinux context is set explicitly so the file: tasks stay idempotent.
+# Without it Ansible re-applies the policy default every run (the FS root
+# starts as unlabeled_t on a fresh xfs), and the task reports as changed.
+# container_var_lib_t is the type podman expects under its graphroot —
+# matches the fcontext rule added below for content created later.
 - name: Ensure podman storage base directory exists
   ansible.builtin.file:
     path: "{{ app_podman_storage_base }}"
@@ -45,6 +50,8 @@
     owner: root
     group: root
     mode: "0755"
+    setype: container_var_lib_t
+    seuser: system_u
 
 - name: Ensure podman storage directory for root exists
   ansible.builtin.file:
@@ -53,6 +60,8 @@
     owner: root
     group: root
     mode: "0700"
+    setype: container_var_lib_t
+    seuser: system_u
 
 - name: Ensure podman storage directory for vm_owner exists
   ansible.builtin.file:
@@ -61,6 +70,8 @@
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "0700"
+    setype: container_var_lib_t
+    seuser: system_u
 
 - name: Add SELinux fcontext for podman storage base
   ansible.builtin.command:

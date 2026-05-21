@@ -80,6 +80,8 @@
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "0755"
+    setype: user_home_t
+    seuser: system_u
   loop: "{{ app_git_repos }}"
   loop_control:
     label: "{{ item.target }}"

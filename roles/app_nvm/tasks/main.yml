@@ -1,12 +1,8 @@
 ---
-- name: Ensure nvm install parent directory exists
-  ansible.builtin.file:
-    path: "{{ app_nvm_install_dir | dirname }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-
+# No separate "ensure parent dir" task — ansible.builtin.file with
+# state: directory creates intermediates. Skipping it also avoids
+# colliding with common_storage (which already owns /mnt/data with
+# vm_owner:vm_owner + mnt_t).
 - name: Ensure nvm install directory exists
   ansible.builtin.file:
     path: "{{ app_nvm_install_dir }}"
@@ -14,6 +10,8 @@
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "0755"
+    setype: user_home_t
+    seuser: system_u
 
 - name: Discover bundled nvm tarball in role files
   ansible.builtin.set_fact:
