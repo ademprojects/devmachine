@@ -225,8 +225,12 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
   `[[registry]]`-Block in `/etc/containers/registries.conf` erzeugt.
 - `app_podman_unqualified_search_registries` — zusätzliche Suchregistries (werden hinter Harbor
   angehängt).
-- `app_podman_auth_json_vault_file` — Pfad zur Ansible-Vault-Datei, die `app_podman_auth_json`
-  enthält. Wenn vorhanden, wird die `auth.json` für root **und** `vm_owner[0]` ausgerollt.
+- `app_podman_auth_json` — Dict mit der `auth.json`-Struktur
+  (`{auths: {"<registry>": {auth: "<base64-user:pass>"}}}`). Übergabe via host_vars
+  (inline mit `!vault`-Block), `-e @secrets.yml --ask-vault-pass` oder direkt per
+  `--extra-vars`. Wenn definiert, wird die Datei für root **und** `vm_owner[0]`
+  unter `~/.config/containers/auth.json` deployed; sonst wird der Schritt geskippt.
+  Keine Datei-Pfad-Konfiguration mehr — die Variable wird zur Laufzeit aufgelöst.
 
 `app_pyenv`-Rolle:
 
@@ -243,7 +247,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
   (default zeigt auf Nexus, wird aber nicht erreicht solange der Cache vorgeladen ist).
 - `app_pyenv_pip_index_url` — pip-Index für `~vm_owner/.pip/pip.conf` (Default = `devmachine_pip_index_url`).
 - `app_pyenv_build_dependencies` — Pakete für `pyenv install` (gcc, make, *-devel).
-- `app_pyenv_proxy_url` — HTTP/HTTPS-Proxy für den `pyenv install`-Lauf (Default = `devmachine_proxy_url`).
+- `app_pyenv_proxy_url` — HTTP/HTTPS-Proxy für den `pyenv install`-Lauf (Default = `proxy_url`).
 - `app_pyenv_install_subdir` — Verzeichnisname unter `~vm_owner` (Default `.pyenv`).
 - `app_pyenv_profile_path` — Pfad der erzeugten `/etc/profile.d/`-Datei.
 
@@ -288,7 +292,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 
 - `devmachine_nexus_fqdn` / `devmachine_nexus_scheme` / `devmachine_nexus_repository_path` — Nexus-Endpoint.
 - `devmachine_proxy_fqdn` / `devmachine_proxy_port` / `devmachine_proxy_scheme` — HTTP-Proxy.
-- `nexus_url`, `devmachine_proxy_url` — aus obigen abgeleitet.
+- `nexus_url`, `proxy_url` — aus obigen abgeleitet.
 - `devmachine_dnf_repo_*` — Konfiguration des Nexus-DNF-Repos (Name, URL, GPG).
 - `devmachine_npm_registry_url`, `devmachine_pip_index_url`, `devmachine_pyenv_mirror_url` — Mirror-URLs.
 - `common_nexus_profile_path` (Default `/etc/profile.d/devmachine-nexus.sh`), `common_nexus_no_proxy`
@@ -297,7 +301,7 @@ Standardwerte stehen in den jeweiligen `roles/<rolle>/defaults/main.yml` und kö
 `common_packages`-Rolle:
 
 - `common_packages_dnf_config_path` (Default `/etc/dnf.conf`).
-- `common_packages_proxy_url` (Default `{{ devmachine_proxy_url }}`) — wird als `proxy=` in dnf.conf eingetragen.
+- `common_packages_proxy_url` (Default `{{ proxy_url }}`) — wird als `proxy=` in dnf.conf eingetragen.
 - `common_packages_gpgcheck`, `common_packages_installonly_limit`, `common_packages_clean_requirements_on_remove`,
   `common_packages_keepcache`, `common_packages_best`, `common_packages_skip_if_unavailable` — dnf-Optionen.
 - `common_packages_full_update_enabled` (Default `false`) — wenn `true`, läuft `dnf update *`
@@ -456,8 +460,8 @@ Podman rootless:
 - `/etc/containers/registries.conf` enthält Harbor (`app_podman_harbor_host`) als ersten
   Eintrag in `unqualified-search-registries`. Harbor wird über den bereits konfigurierten
   HTTP/HTTPS-Proxy aus `/etc/profile.d/devmachine-nexus.sh` erreicht.
-- Eine vault-verschlüsselte `auth.json` (Variable `app_podman_auth_json` in
-  `app_podman_auth_json_vault_file`) wird nach `/root/.config/containers/auth.json` und
+- Eine extern übergebene `app_podman_auth_json` (host_vars mit `!vault`-Block,
+  `-e @secrets.vault.yml`, oder `--extra-vars`) wird nach `/root/.config/containers/auth.json` und
   `~vm_owner/.config/containers/auth.json` (Mode 0600) deployed. Format wie Docker/Podman:
   ```yaml
   app_podman_auth_json:

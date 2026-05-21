@@ -17,9 +17,9 @@
     content: |
       # Managed by Ansible role common_nexus. Do not edit by hand.
       export PIP_INDEX_URL="{{ devmachine_pip_index_url }}"
-      export HTTP_PROXY="{{ devmachine_proxy_url }}"
-      export HTTPS_PROXY="{{ devmachine_proxy_url }}"
-      export http_proxy="{{ devmachine_proxy_url }}"
-      export https_proxy="{{ devmachine_proxy_url }}"
+      export HTTP_PROXY="{{ proxy_url }}"
+      export HTTPS_PROXY="{{ proxy_url }}"
+      export http_proxy="{{ proxy_url }}"
+      export https_proxy="{{ proxy_url }}"
       export NO_PROXY="{{ common_nexus_no_proxy }}"
       export no_proxy="{{ common_nexus_no_proxy }}"

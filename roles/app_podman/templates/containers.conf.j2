@@ -1,0 +1,22 @@
+# Managed by Ansible (roles/app_podman). System-wide podman configuration.
+# Merges on top of /usr/share/containers/containers.conf.
+#
+# Why both [engine] env AND [containers] env: [engine] sets variables for
+# podman ITSELF (so `podman pull harbor.x/...` reaches Harbor through the
+# corp proxy), [containers] sets variables INSIDE every container at
+# runtime (so processes in containers can resolve outbound calls too).
+
+[containers]
+http_proxy = true
+env = [
+  "HTTP_PROXY={{ app_podman_proxy_url }}",
+  "HTTPS_PROXY={{ app_podman_proxy_url }}",
+  "NO_PROXY={{ app_podman_no_proxy }}",
+]
+
+[engine]
+env = [
+  "HTTP_PROXY={{ app_podman_proxy_url }}",
+  "HTTPS_PROXY={{ app_podman_proxy_url }}",
+  "NO_PROXY={{ app_podman_no_proxy }}",
+]

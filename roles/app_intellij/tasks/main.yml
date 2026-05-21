@@ -113,6 +113,25 @@
     state: link
     force: true
 
+# Resolve the per-version config dir name (e.g. "IntelliJIdea2026.1") from
+# product-info.json — IntelliJ 2020+ reads user-installed plugins from
+# $XDG_DATA_HOME/JetBrains/<data_dir>/plugins/, NOT from <IDE>/plugins/
+# (which is reserved for bundled plugins). dataDirectoryName is the
+# canonical source IntelliJ itself uses.
+- name: Read IntelliJ product-info.json
+  ansible.builtin.slurp:
+    src: "{{ app_intellij_home }}/product-info.json"
+  register: app_intellij_product_info_raw
+
+- name: Resolve IntelliJ data directory name
+  ansible.builtin.set_fact:
+    app_intellij_data_dir_name: >-
+      {{ (app_intellij_product_info_raw.content | b64decode | from_json).dataDirectoryName }}
+
+- name: Resolve per-user IntelliJ plugins directory
+  ansible.builtin.set_fact:
+    app_intellij_user_plugins_dir: "{{ vm_owner_home }}/.local/share/JetBrains/{{ app_intellij_data_dir_name | trim }}/plugins"
+
 - name: Discover IntelliJ plugin files in role files
   ansible.builtin.set_fact:
     app_intellij_plugin_files: >-
@@ -127,54 +146,53 @@
   ansible.builtin.debug:
     msg: >-
       Found {{ app_intellij_plugin_files | length }} IntelliJ plugin file(s) under
-      roles/app_intellij/files/{{ app_intellij_plugins_subdir }}/.
+      roles/app_intellij/files/{{ app_intellij_plugins_subdir }}/; deploying to
+      {{ app_intellij_user_plugins_dir }}.
 
-- name: Ensure IntelliJ plugins directory exists
+- name: Ensure per-user IntelliJ plugins directory exists
   ansible.builtin.file:
-    path: "{{ app_intellij_home }}/plugins"
+    path: "{{ app_intellij_user_plugins_dir }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0755"
 
-- name: Extract IntelliJ ZIP plugins into install directory
-  ansible.builtin.unarchive:
-    src: "{{ app_intellij_plugins_subdir }}/{{ item }}"
-    dest: "{{ app_intellij_home }}/plugins"
-    owner: root
-    group: root
+# Resolve the top-level directory of each ZIP plugin on the controller so
+# we can give `unarchive` a `creates:` guard — without it, ansible always
+# reports "changed" for ZIPs whose archive entries don't have a separate
+# top-level dir record (go-plugin, JPA Buddy, makefile, …).
+- name: Resolve top-level dir of each IntelliJ ZIP plugin (controller-side)
+  ansible.builtin.command:
+    cmd: "unzip -Z -1 {{ role_path }}/files/{{ app_intellij_plugins_subdir }}/{{ item }}"
+  register: app_intellij_plugin_zip_listings
+  changed_when: false
+  delegate_to: localhost
+  become: false
   loop: "{{ app_intellij_plugin_files | select('match', '.*\\.zip$') | list }}"
   loop_control:
     label: "{{ item }}"
 
-- name: Install IntelliJ JAR plugins into install directory
+- name: Extract IntelliJ ZIP plugins into the user plugins dir
+  ansible.builtin.unarchive:
+    src: "{{ app_intellij_plugins_subdir }}/{{ item.item }}"
+    dest: "{{ app_intellij_user_plugins_dir }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    creates: "{{ app_intellij_user_plugins_dir }}/{{ item.stdout_lines | first | split('/') | first }}"
+  loop: "{{ app_intellij_plugin_zip_listings.results }}"
+  loop_control:
+    label: "{{ item.item }} -> {{ item.stdout_lines | first | split('/') | first }}"
+
+- name: Install IntelliJ JAR plugins into the user plugins dir
   ansible.builtin.copy:
     src: "{{ app_intellij_plugins_subdir }}/{{ item }}"
-    dest: "{{ app_intellij_home }}/plugins/{{ item }}"
-    owner: root
-    group: root
+    dest: "{{ app_intellij_user_plugins_dir }}/{{ item }}"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
     mode: "0644"
   loop: "{{ app_intellij_plugin_files | select('match', '.*\\.jar$') | list }}"
   loop_control:
     label: "{{ item }}"
-
-# Expose IntelliJ's per-version config directory name (e.g. "IntelliJIdea2026.1")
-# so other roles can write into ~/.config/JetBrains/<name>/ without hard-coding
-# the version. The name comes from product-info.json's `dataDirectoryName`
-# field, which is the canonical source IntelliJ itself uses.
-- name: Read IntelliJ product-info.json
-  ansible.builtin.slurp:
-    src: "{{ app_intellij_home }}/product-info.json"
-  register: app_intellij_product_info_raw
-
-- name: Resolve IntelliJ data directory name
-  ansible.builtin.set_fact:
-    app_intellij_data_dir_name: >-
-      {{ (app_intellij_product_info_raw.content | b64decode | from_json).dataDirectoryName }}
-
-- name: Report resolved IntelliJ data directory name
-  ansible.builtin.debug:
-    msg: "IntelliJ per-user config dir: ~/.config/JetBrains/{{ app_intellij_data_dir_name }}/"
 
 # JetBrains tarballs ship the launcher icon at <home>/bin/idea.{png,svg}. Drop
 # it into the hicolor theme so the .desktop Icon= name resolves consistently

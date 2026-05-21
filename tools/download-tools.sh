@@ -163,19 +163,17 @@ assert_nonempty "$NVM_DIR/$NVM_FILE" "nvm $NVM_VER"
 
 # Bundle every LTS line the devmachine ships. Override via env:
 # `NODE_VERSIONS="v24.15.0 v22.22.3" tools/download-tools.sh`
+# SHASUMS256.txt is not fetched — the role generates a one-line checksum file
+# from the bundled tarball at provisioning time. Keeps the bundle smaller and
+# avoids depending on nodejs.org being reachable for the SHASUMS file.
 read -ra NODE_VERSIONS <<< "${NODE_VERSIONS:-v24.15.0 v22.22.3}"
 for ver in "${NODE_VERSIONS[@]}"; do
   node_file="node-${ver}-linux-x64.tar.xz"
-  shasums_file="node-${ver}-SHASUMS256.txt"
-  echo ">>> Downloading Node ${ver} (binary + SHASUMS256.txt)"
+  echo ">>> Downloading Node ${ver} binary"
   curl "${curl_opts[@]}" \
     --output "$NVM_DIR/$node_file" \
     "https://nodejs.org/dist/${ver}/node-${ver}-linux-x64.tar.xz"
   assert_nonempty "$NVM_DIR/$node_file" "Node ${ver} binary"
-  curl "${curl_opts[@]}" \
-    --output "$NVM_DIR/$shasums_file" \
-    "https://nodejs.org/dist/${ver}/SHASUMS256.txt"
-  assert_nonempty "$NVM_DIR/$shasums_file" "Node ${ver} SHASUMS256.txt"
 done
 
 # ---- Go toolchain ---------------------------------------------------------

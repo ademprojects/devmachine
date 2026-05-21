@@ -128,6 +128,56 @@
 
 # ---- registries.conf (Harbor + unqualified search) ----
 
+- name: Write /etc/containers/containers.conf (proxy for engine + containers)
+  ansible.builtin.template:
+    src: containers.conf.j2
+    dest: /etc/containers/containers.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# Defense-in-depth: drop the same proxy env into systemd's environment for the
+# rootful podman service AND the systemd-user manager, so any podman process
+# launched via systemd (quadlet, podman-auto-update.timer, user-session
+# containers) sees HTTP_PROXY even before it parses containers.conf.
+
+- name: Ensure systemd drop-in dirs for podman proxy exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/systemd/system/podman.service.d
+    - /etc/systemd/system/user@.service.d
+
+- name: Drop-in proxy env for rootful podman.service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/podman.service.d/proxy.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Service]
+      Environment=HTTP_PROXY={{ app_podman_proxy_url }}
+      Environment=HTTPS_PROXY={{ app_podman_proxy_url }}
+      Environment=NO_PROXY={{ app_podman_no_proxy }}
+  notify: Reload systemd
+
+- name: Drop-in proxy env for the rootless systemd-user manager (all users)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/user@.service.d/proxy.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Service]
+      Environment=HTTP_PROXY={{ app_podman_proxy_url }}
+      Environment=HTTPS_PROXY={{ app_podman_proxy_url }}
+      Environment=NO_PROXY={{ app_podman_no_proxy }}
+  notify: Reload systemd
+
 - name: Build effective unqualified search registries list
   ansible.builtin.set_fact:
     app_podman_effective_unqualified_search: >-
@@ -151,6 +201,7 @@
       [[registry]]
       prefix = "{{ app_podman_harbor_host }}"
       location = "{{ app_podman_harbor_host }}"
+      insecure = {{ app_podman_harbor_insecure | bool | tojson }}
       {% endif %}
 
 # ---- short-name aliases (drop-in; OS default removed for offline hosts) ----
@@ -179,48 +230,17 @@
     mode: "0644"
   when: app_podman_harbor_host | length > 0
 
-# ---- auth.json from vault (root + vm_owner) ----
+# ---- auth.json (root + vm_owner) -----------------------------------------
+# Expects `app_podman_auth_json` to be defined externally (e.g. inline
+# vault-encrypted in host_vars, via `-e @secrets.vault.yml`, or `--extra-vars`).
+# Skips silently when unset. The dict is rendered to JSON on the fly.
 
-- name: Stat podman auth vault file on controller
-  ansible.builtin.stat:
-    path: "{{ app_podman_auth_json_vault_file }}"
-  register: app_podman_auth_vault_stat
-  delegate_to: localhost
-  become: false
-  run_once: true
-
-- name: Read podman auth vault file header on controller
-  ansible.builtin.command:
-    cmd: "head -c 14 {{ app_podman_auth_json_vault_file }}"
-  register: app_podman_auth_vault_header
-  changed_when: false
-  delegate_to: localhost
-  become: false
-  run_once: true
-  when: app_podman_auth_vault_stat.stat.exists
-
-- name: Assert podman auth vault file is ansible-vault encrypted
-  ansible.builtin.assert:
-    that:
-      - app_podman_auth_vault_header.stdout.startswith('$ANSIBLE_VAULT;')
-    fail_msg: >-
-      {{ app_podman_auth_json_vault_file }} is not ansible-vault encrypted
-      (header does not start with '$ANSIBLE_VAULT;'). Refusing to load potential
-      cleartext credentials. Encrypt the file via `ansible-vault encrypt <path>`.
-  when: app_podman_auth_vault_stat.stat.exists
-
-- name: Load podman auth.json from vault file
-  ansible.builtin.include_vars:
-    file: "{{ app_podman_auth_json_vault_file }}"
-  when: app_podman_auth_vault_stat.stat.exists
-  no_log: true
-
-- name: Report missing auth vault file
+- name: Report missing app_podman_auth_json
   ansible.builtin.debug:
     msg: >-
-      {{ app_podman_auth_json_vault_file }} not found — skipping podman auth.json deployment.
-      Create the vault file with `app_podman_auth_json` to enable registry login.
-  when: not app_podman_auth_vault_stat.stat.exists
+      app_podman_auth_json is not defined — skipping podman auth.json deployment.
+      Pass it via host_vars / -e to enable registry login.
+  when: app_podman_auth_json is not defined
 
 - name: Ensure /root/.config/containers exists
   ansible.builtin.file:
@@ -229,9 +249,7 @@
     owner: root
     group: root
     mode: "0700"
-  when:
-    - app_podman_auth_vault_stat.stat.exists
-    - app_podman_auth_json is defined
+  when: app_podman_auth_json is defined
 
 - name: Deploy podman auth.json for root
   ansible.builtin.copy:
@@ -240,9 +258,7 @@
     owner: root
     group: root
     mode: "0600"
-  when:
-    - app_podman_auth_vault_stat.stat.exists
-    - app_podman_auth_json is defined
+  when: app_podman_auth_json is defined
   no_log: true
 
 - name: Deploy podman auth.json for vm_owner
@@ -252,9 +268,7 @@
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "0600"
-  when:
-    - app_podman_auth_vault_stat.stat.exists
-    - app_podman_auth_json is defined
+  when: app_podman_auth_json is defined
   no_log: true
 
 # ---- Verification ----

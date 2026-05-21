@@ -1,8 +1,11 @@
 ---
 common_dev_firewall_enabled: true
 # Each entry is a string accepted by firewall-cmd --add-port, e.g.
-# "3000" for a single port or "3000-3010" for a range.
-common_dev_firewall_tcp_ports: []
+# "3000" for a single port or "3000-3010" for a range. SSH (22) is opened
+# explicitly here even though firewalld's default 'ssh' service usually
+# covers it — explicit is safer when zones are customized.
+common_dev_firewall_tcp_ports:
+  - "22"
 common_dev_firewall_udp_ports: []
 # Typical frontend dev server ports — copy into your host_vars as needed:
 #   - "3000"   React / Next.js / generic Node dev servers

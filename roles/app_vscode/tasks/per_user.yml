@@ -53,3 +53,28 @@
     label: "{{ item }}"
   when: (item | regex_replace('\\.vsix$', '') | lower)
     not in (app_vscode_installed_extensions.stdout_lines | map('lower') | list)
+
+# Bootstrap proxy settings into the user's settings.json. force: false keeps
+# subsequent UI-driven settings changes intact — to pick up updated defaults,
+# delete ~/.config/Code/User/settings.json and re-run the playbook.
+- name: Ensure VS Code user config dir exists for {{ app_vscode_target_user }}
+  ansible.builtin.file:
+    path: "{{ app_vscode_target_user_home }}/.config/Code/User"
+    state: directory
+    mode: "0755"
+  become: true
+  become_user: "{{ app_vscode_target_user }}"
+
+- name: Bootstrap VS Code settings.json with proxy config
+  ansible.builtin.copy:
+    dest: "{{ app_vscode_target_user_home }}/.config/Code/User/settings.json"
+    mode: "0644"
+    force: false
+    content: |
+      {
+        "http.proxy": "{{ app_vscode_proxy_url }}",
+        "http.proxyStrictSSL": {{ app_vscode_proxy_strict_ssl | bool | tojson }},
+        "http.proxySupport": "on"
+      }
+  become: true
+  become_user: "{{ app_vscode_target_user }}"

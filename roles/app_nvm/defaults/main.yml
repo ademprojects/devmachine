@@ -20,5 +20,5 @@ app_nvm_node_versions:
 # Which of the installed versions becomes `nvm alias default`.
 app_nvm_node_default: v24.15.0
 app_nvm_set_default: true
-app_nvm_proxy_url: "{{ devmachine_proxy_url }}"
+app_nvm_proxy_url: "{{ proxy_url }}"
 app_nvm_npm_registry_url: "{{ devmachine_npm_registry_url }}"

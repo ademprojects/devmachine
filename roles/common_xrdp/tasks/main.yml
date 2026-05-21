@@ -106,3 +106,63 @@
   when:
     - common_xrdp_open_firewall | bool
     - (ansible_facts.services['firewalld.service'].state | default('')) == 'running'
+
+# XFCE 4.18+ refuses to run ~/Desktop/*.desktop without the gio
+# `metadata::trusted` attribute — every app icon prompts "the location is
+# not trusted" until the user right-clicks each one. Dropped here as a
+# one-shot autostart because setting the attribute via `gio set` needs an
+# active user session (DBus), which Ansible doesn't have at provisioning
+# time. The script self-removes after the first login.
+
+- name: Ensure ~vm_owner/.local/bin exists
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/.local/bin"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Ensure ~vm_owner/.config/autostart exists
+  ansible.builtin.file:
+    path: "{{ vm_owner_home }}/.config/autostart"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Deploy first-login script to mark Desktop launchers as trusted
+  ansible.builtin.template:
+    src: devmachine-trust-desktop.sh.j2
+    dest: "{{ vm_owner_home }}/.local/bin/devmachine-trust-desktop.sh"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Deploy autostart entry for trust-desktop script
+  ansible.builtin.template:
+    src: devmachine-trust-desktop.desktop.j2
+    dest: "{{ vm_owner_home }}/.config/autostart/devmachine-trust-desktop.desktop"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"
+
+# Same pattern: drop a one-shot autostart that adds launchers (Chrome,
+# VS Code, IntelliJ, KeePassXC) to the bottom XFCE panel via xfconf-query,
+# then removes itself. Sentinel in ~/.cache/ prevents re-running on later
+# sessions even if the autostart file lingers.
+
+- name: Deploy first-login script to add launchers to the XFCE panel
+  ansible.builtin.template:
+    src: devmachine-setup-panel.sh.j2
+    dest: "{{ vm_owner_home }}/.local/bin/devmachine-setup-panel.sh"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Deploy autostart entry for panel-setup script
+  ansible.builtin.template:
+    src: devmachine-setup-panel.desktop.j2
+    dest: "{{ vm_owner_home }}/.config/autostart/devmachine-setup-panel.desktop"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"

@@ -3,3 +3,10 @@ app_vscode_rpm: code-1.120.0-1778619100.el8.x86_64.rpm
 app_vscode_sha256: ""
 app_vscode_package_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/packages"
 app_vscode_plugins_subdir: plugins
+
+# Proxy bootstrap for ~/.config/Code/User/settings.json. Written with
+# force: false — VS Code itself updates this file when the user changes
+# settings via the UI, so we only seed it on first deploy. Delete the file
+# and re-run to pick up changed defaults.
+app_vscode_proxy_url: "{{ proxy_url }}"
+app_vscode_proxy_strict_ssl: true

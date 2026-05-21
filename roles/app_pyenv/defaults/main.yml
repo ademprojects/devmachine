@@ -16,7 +16,7 @@ app_pyenv_python_versions:
   - "3.12.13"  # previous stable
 # Which of the installed versions becomes `pyenv global`.
 app_pyenv_python_default: "3.14.5"
-app_pyenv_proxy_url: "{{ devmachine_proxy_url }}"
+app_pyenv_proxy_url: "{{ proxy_url }}"
 app_pyenv_pip_index_url: "{{ devmachine_pip_index_url }}"
 app_pyenv_build_dependencies:
   - gcc

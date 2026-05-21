@@ -129,14 +129,16 @@
   loop_control:
     label: "{{ item }}"
 
-- name: Place SHASUMS256.txt into local mirror
-  ansible.builtin.copy:
-    src: "node-{{ item }}-SHASUMS256.txt"
-    dest: "{{ app_nvm_install_dir }}/nodejs-dist/{{ item }}/SHASUMS256.txt"
-    owner: "{{ vm_owner_name }}"
-    group: "{{ vm_owner_group }}"
-    mode: "0644"
-    force: false
+# nvm verlangt SHASUMS256.txt im Mirror-Dir; wir generieren es lokal aus dem
+# gerade kopierten Tarball statt es von nodejs.org zu bundeln. Eine Zeile,
+# Format `<sha256>  <filename>` — genau das was nvm's checksum check liest.
+- name: Generate SHASUMS256.txt for each bundled Node version
+  ansible.builtin.shell:
+    cmd: 'sha256sum "node-{{ item }}-linux-x64.tar.xz" > SHASUMS256.txt'
+    chdir: "{{ app_nvm_install_dir }}/nodejs-dist/{{ item }}"
+    creates: "{{ app_nvm_install_dir }}/nodejs-dist/{{ item }}/SHASUMS256.txt"
+  become: true
+  become_user: "{{ vm_owner_name }}"
   loop: "{{ app_nvm_node_versions }}"
   loop_control:
     label: "{{ item }}"

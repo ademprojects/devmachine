@@ -9,7 +9,7 @@ devmachine_proxy_port: 3128
 
 # Derived endpoint URLs
 nexus_url: "{{ devmachine_nexus_scheme }}://{{ devmachine_nexus_fqdn }}{{ devmachine_nexus_repository_path }}"
-devmachine_proxy_url: "{{ devmachine_proxy_scheme }}://{{ devmachine_proxy_fqdn }}:{{ devmachine_proxy_port }}"
+proxy_url: "{{ devmachine_proxy_scheme }}://{{ devmachine_proxy_fqdn }}:{{ devmachine_proxy_port }}"
 
 # Nexus-backed DNF repository
 devmachine_dnf_repo_name: nexus-rhel9-baseos

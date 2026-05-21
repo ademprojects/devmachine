@@ -2,7 +2,7 @@
 common_sshd_dropin_path: /etc/ssh/sshd_config.d/50-devmachine.conf
 common_sshd_client_alive_interval: 60
 common_sshd_client_alive_count_max: 3
-common_sshd_allow_agent_forwarding: "no"
+common_sshd_allow_agent_forwarding: "yes"
 common_sshd_allow_tcp_forwarding: "yes"
 common_sshd_x11_forwarding: "no"
 common_sshd_max_startups: "100:30:200"

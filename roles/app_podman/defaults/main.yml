@@ -17,8 +17,19 @@ app_podman_storage_base: "{{ common_storage_mount_point | default('/mnt/data') }
 app_podman_storage_driver: overlay
 app_podman_storage_mount_program: /usr/bin/fuse-overlayfs
 
-# Registry config — Harbor referenced and used as unqualified search target
+# Proxy for podman itself (registry pulls from Harbor etc.) and the env
+# passed into containers at runtime. /etc/profile.d only covers interactive
+# shells; containers.conf [engine] env is what systemd-spawned podman picks
+# up. Same proxy_url as common_nexus by default.
+app_podman_proxy_url: "{{ proxy_url }}"
+app_podman_no_proxy: "{{ common_nexus_no_proxy }}"
+
+# Registry config — Harbor referenced and used as unqualified search target.
+# `_insecure: true` skips TLS verification (use when Harbor presents a
+# self-signed / internal-CA cert and you can't / don't want to ship the CA
+# bundle). Default false; flip per host if needed.
 app_podman_harbor_host: ""
+app_podman_harbor_insecure: true
 app_podman_unqualified_search_registries: []
 
 # Short-name aliases — drop-in /etc/containers/registries.conf.d/99-devmachine-shortnames.conf.
@@ -42,5 +53,12 @@ app_podman_shortname_aliases:
   node: "{{ app_podman_harbor_host }}/library/node"
   openjdk: "{{ app_podman_harbor_host }}/library/openjdk"
 
-# auth.json for podman / docker registry login (root + vm_owner)
-app_podman_auth_json_vault_file: "{{ playbook_dir }}/../inventory/group_vars/all/app_podman_auth.vault.yml"
+# auth.json for podman / docker registry login (root + vm_owner).
+# Pass `app_podman_auth_json` as a dict via host_vars (vault-encrypted inline,
+# `!vault` block) or `-e @secrets.yml --ask-vault-pass` — no file path here.
+# Example structure:
+#   app_podman_auth_json:
+#     auths:
+#       "harbor.firma.intern":
+#         auth: "BASE64_USER_PASS"
+# Undefined → role skips the auth.json deploy.

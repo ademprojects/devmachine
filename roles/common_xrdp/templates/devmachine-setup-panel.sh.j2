@@ -1,0 +1,73 @@
+#!/bin/bash
+# Ansible-managed (roles/common_xrdp). Beim ersten Login ergänzt das die
+# untere XFCE-Leiste (panel-2) um Launcher für die wichtigsten Dev-Apps.
+# Sentinel verhindert mehrfaches Anhängen bei späteren Sessions; das Script
+# entfernt sich + den Autostart-Eintrag wenn der Sentinel sitzt.
+
+set -uo pipefail
+
+SENTINEL="${HOME}/.cache/devmachine-panel-configured"
+LOG="${HOME}/.local/state/devmachine-setup-panel.log"
+AUTOSTART="${HOME}/.config/autostart/devmachine-setup-panel.desktop"
+SELF="$(readlink -f "$0")"
+
+mkdir -p "$(dirname "$LOG")" "$(dirname "$SENTINEL")"
+exec >>"$LOG" 2>&1
+echo
+echo "=== $(date -Is) panel setup (pid $$) ==="
+
+if [ -f "$SENTINEL" ]; then
+    echo "sentinel exists — already configured; removing autostart + self"
+    rm -f "$AUTOSTART" "$SELF"
+    exit 0
+fi
+
+if ! command -v xfconf-query >/dev/null 2>&1; then
+    echo "xfconf-query not on PATH; skipping (XFCE not active?)"
+    exit 0
+fi
+
+# Reihenfolge in der die Launcher in der Leiste erscheinen sollen.
+APPS=(
+  google-chrome.desktop
+  code.desktop
+  jetbrains-idea.desktop
+  keepassxc.desktop
+)
+
+# Nächste freie Plugin-ID = aktuelles Max + 1
+existing_max=$(xfconf-query -c xfce4-panel -l 2>/dev/null \
+    | grep -oE '/plugins/plugin-[0-9]+' \
+    | grep -oE '[0-9]+$' \
+    | sort -n | tail -1)
+next_id=$(( ${existing_max:-0} + 1 ))
+
+new_ids=()
+for desktop in "${APPS[@]}"; do
+    if [ ! -f "/usr/share/applications/$desktop" ]; then
+        echo "skip $desktop (not installed)"
+        continue
+    fi
+    echo "adding launcher plugin-$next_id for $desktop"
+    xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id" -n -t string -s "launcher"
+    xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id/items" -n -t string -s "$desktop" -a
+    new_ids+=("$next_id")
+    next_id=$(( next_id + 1 ))
+done
+
+if [ "${#new_ids[@]}" -gt 0 ]; then
+    args=()
+    for id in "${new_ids[@]}"; do
+        args+=(-t int -s "$id")
+    done
+    # An die existierenden plugin-ids von panel-2 anhängen
+    xfconf-query -c xfce4-panel -p /panels/panel-2/plugin-ids "${args[@]}" -a \
+        || echo "WARN: could not append plugin-ids to panel-2" >&2
+fi
+
+# Panel neu starten, damit die Launcher sofort erscheinen
+xfce4-panel --restart >/dev/null 2>&1 || true
+
+touch "$SENTINEL"
+echo "done — removing autostart + self"
+rm -f "$AUTOSTART" "$SELF"
