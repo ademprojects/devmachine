@@ -1,7 +1,14 @@
 #!/bin/bash
 # Ansible-managed (roles/common_xrdp). One-shot autostart that marks every
-# .desktop launcher in ~/Desktop as trusted via gio metadata, so XFCE 4.18+
-# stops prompting "the location is not trusted, run anyway?" on each icon.
+# .desktop launcher in ~/Desktop as trusted, so XFCE 4.18+ stops prompting
+# "Nicht vertrauenswürdiger Anwendungsstarter / the location is not trusted".
+#
+# XFCE 4.18+ pinned launcher trust to the file's content hash via the
+# metadata::xfce-exe-checksum attribute — the trust becomes invalid the
+# moment the .desktop content changes. metadata::trusted (the Nautilus
+# attribute) alone is not honoured by xfdesktop. We set both so older
+# XFCE versions keep working too.
+#
 # Removes itself + the autostart entry once done.
 
 set -uo pipefail
@@ -23,11 +30,20 @@ fi
 
 shopt -s nullglob
 for f in "$HOME/Desktop"/*.desktop; do
-    if gio set "$f" metadata::trusted true; then
-        echo "trusted $f"
+    # XFCE 4.18+ content-hash trust marker
+    sum=$(sha256sum "$f" | awk '{print $1}')
+    if gio set -t string "$f" metadata::xfce-exe-checksum "$sum"; then
+        echo "set xfce-exe-checksum on $f ($sum)"
     else
-        echo "FAILED to trust $f" >&2
+        echo "FAILED to set xfce-exe-checksum on $f" >&2
     fi
+    # Legacy / Nautilus attribute — harmless under XFCE 4.18+ but kept for
+    # compatibility with pre-4.18 spins where it was the only check.
+    if gio set -t string "$f" metadata::trusted "true"; then
+        echo "set legacy metadata::trusted on $f"
+    fi
+    # +x is also a requirement for the launcher dialog to skip its prompt
+    chmod +x "$f" 2>/dev/null || true
 done
 shopt -u nullglob
 
