@@ -30,12 +30,17 @@ if ! command -v xfconf-query >/dev/null 2>&1; then
     exit 0
 fi
 
-# Reihenfolge in der die Launcher in der Leiste erscheinen sollen.
-APPS=(
-  google-chrome.desktop
-  code.desktop
-  jetbrains-idea.desktop
-  keepassxc.desktop
+# Reihenfolge in der die Plugins in der Leiste erscheinen sollen.
+# Format pro Zeile: "<type>|<payload>"
+#   launcher|<desktop>       — Launcher für /usr/share/applications/<desktop>
+#   plugin|<plugin-name>     — eingebautes Panel-Plugin (showdesktop, separator, ...)
+PLUGINS=(
+  "plugin|showdesktop"
+  "launcher|thunar.desktop"
+  "launcher|google-chrome.desktop"
+  "launcher|code.desktop"
+  "launcher|jetbrains-idea.desktop"
+  "launcher|keepassxc.desktop"
 )
 
 # Nächste freie Plugin-ID = aktuelles Max + 1
@@ -46,14 +51,28 @@ existing_max=$(xfconf-query -c xfce4-panel -l 2>/dev/null \
 next_id=$(( ${existing_max:-0} + 1 ))
 
 new_ids=()
-for desktop in "${APPS[@]}"; do
-    if [ ! -f "/usr/share/applications/$desktop" ]; then
-        echo "skip $desktop (not installed)"
-        continue
-    fi
-    echo "adding launcher plugin-$next_id for $desktop"
-    xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id" -n -t string -s "launcher"
-    xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id/items" -n -t string -s "$desktop" -a
+for entry in "${PLUGINS[@]}"; do
+    ptype="${entry%%|*}"
+    payload="${entry#*|}"
+    case "$ptype" in
+        launcher)
+            if [ ! -f "/usr/share/applications/$payload" ]; then
+                echo "skip launcher $payload (not installed)"
+                continue
+            fi
+            echo "adding launcher plugin-$next_id for $payload"
+            xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id" -n -t string -s "launcher"
+            xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id/items" -n -t string -s "$payload" -a
+            ;;
+        plugin)
+            echo "adding builtin plugin-$next_id ($payload)"
+            xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id" -n -t string -s "$payload"
+            ;;
+        *)
+            echo "WARN: unknown entry type '$ptype' — skipping"
+            continue
+            ;;
+    esac
     new_ids+=("$next_id")
     next_id=$(( next_id + 1 ))
 done

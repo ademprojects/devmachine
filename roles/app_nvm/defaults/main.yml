@@ -1,17 +1,15 @@
 ---
 # nvm itself + every Node binary listed below are fetched on the controller
-# by tools/download-tools.sh and land in roles/app_nvm/files/ — the role
-# auto-discovers nvm-*.tar.gz, node-*-linux-x64.tar.xz and the matching
-# SHASUMS256.txt files, then serves the binaries via a local file:// mirror
-# so `nvm install` never reaches out to nodejs.org / Nexus at runtime.
+# by tools/download-tools.sh and land in roles/app_nvm/files/. The role
+# auto-discovers nvm-*.tar.gz and node-*-linux-x64.tar.xz, then extracts
+# each Node tarball directly into $NVM_DIR/versions/node/<version>/ so
+# `nvm install` (which would require an index.tab + SHASUMS256.txt mirror)
+# is bypassed entirely — nvm picks the versions up on next source.
 app_nvm_install_subdir: .nvm
 # nvm lives on the data disk (installed Node versions + global npm modules can grow).
 # A symlink {{ vm_owner_home }}/.nvm → app_nvm_install_dir keeps tooling that
 # assumes ~/.nvm (incl. profile.d's $HOME/.nvm check) working transparently.
 app_nvm_install_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/nvm"
-# file:// URL pointing at the locally-staged mirror — overrides any
-# Nexus/nodejs.org URL in NVM_NODEJS_ORG_MIRROR.
-app_nvm_nodejs_mirror_url: "file://{{ app_nvm_install_dir }}/nodejs-dist/"
 app_nvm_profile_path: /etc/profile.d/app-nvm.sh
 # Keep in sync with NODE_VERSIONS in tools/download-tools.sh.
 app_nvm_node_versions:

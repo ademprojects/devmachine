@@ -82,11 +82,15 @@
     content: |
       if [ -s "$HOME/{{ app_nvm_install_subdir }}/nvm.sh" ]; then
         export NVM_DIR="$HOME/{{ app_nvm_install_subdir }}"
-        export NVM_NODEJS_ORG_MIRROR="{{ app_nvm_nodejs_mirror_url }}"
         \. "$NVM_DIR/nvm.sh"
       fi
 
-# ----- local file:// mirror so `nvm install` skips the network -------------
+# ----- offline install: extract Node tarballs directly into NVM_DIR ---------
+# `nvm install vX.Y.Z` validates the version against ${NVM_NODEJS_ORG_MIRROR}/index.tab
+# before downloading. Building a fake index.tab is brittle — instead we drop
+# the binaries straight into $NVM_DIR/versions/node/<version>/, which nvm
+# picks up on next source as an already-installed version. `nvm use`,
+# `nvm alias default` and `corepack enable` then work without the mirror.
 
 - name: Discover bundled Node binary tarballs in role files
   ansible.builtin.set_fact:
@@ -107,9 +111,9 @@
   loop_control:
     label: "{{ item }}"
 
-- name: Ensure per-version Node mirror dirs exist
+- name: Ensure per-version Node install dirs exist
   ansible.builtin.file:
-    path: "{{ app_nvm_install_dir }}/nodejs-dist/{{ item }}"
+    path: "{{ app_nvm_install_dir }}/versions/node/{{ item }}"
     state: directory
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
@@ -118,51 +122,18 @@
   loop_control:
     label: "{{ item }}"
 
-- name: Place Node binaries into local mirror
-  ansible.builtin.copy:
+- name: Extract Node binaries into nvm versions dir
+  ansible.builtin.unarchive:
     src: "node-{{ item }}-linux-x64.tar.xz"
-    dest: "{{ app_nvm_install_dir }}/nodejs-dist/{{ item }}/node-{{ item }}-linux-x64.tar.xz"
+    dest: "{{ app_nvm_install_dir }}/versions/node/{{ item }}"
+    extra_opts:
+      - --strip-components=1
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
-    mode: "0644"
-    force: false
+    creates: "{{ app_nvm_install_dir }}/versions/node/{{ item }}/bin/node"
   loop: "{{ app_nvm_node_versions }}"
   loop_control:
     label: "{{ item }}"
-
-# nvm verlangt SHASUMS256.txt im Mirror-Dir; wir generieren es lokal aus dem
-# gerade kopierten Tarball statt es von nodejs.org zu bundeln. Eine Zeile,
-# Format `<sha256>  <filename>` — genau das was nvm's checksum check liest.
-- name: Generate SHASUMS256.txt for each bundled Node version
-  ansible.builtin.shell:
-    cmd: 'sha256sum "node-{{ item }}-linux-x64.tar.xz" > SHASUMS256.txt'
-    chdir: "{{ app_nvm_install_dir }}/nodejs-dist/{{ item }}"
-    creates: "{{ app_nvm_install_dir }}/nodejs-dist/{{ item }}/SHASUMS256.txt"
-  become: true
-  become_user: "{{ vm_owner_name }}"
-  loop: "{{ app_nvm_node_versions }}"
-  loop_control:
-    label: "{{ item }}"
-
-# ----- install + default ---------------------------------------------------
-
-- name: Install configured Node versions via nvm (uses the local mirror)
-  ansible.builtin.shell:
-    cmd: |
-      set -euo pipefail
-      . "{{ app_nvm_install_dir }}/nvm.sh"
-      nvm install {{ item }}
-  become: true
-  become_user: "{{ vm_owner_name }}"
-  environment:
-    HOME: "{{ vm_owner_home }}"
-    NVM_DIR: "{{ app_nvm_install_dir }}"
-    NVM_NODEJS_ORG_MIRROR: "{{ app_nvm_nodejs_mirror_url }}"
-  loop: "{{ app_nvm_node_versions }}"
-  loop_control:
-    label: "{{ item }}"
-  register: app_nvm_install_results
-  changed_when: "'Now using node' in (app_nvm_install_results.stdout | default(''))"
 
 - name: Set default Node version for vm_owner
   ansible.builtin.shell:
