@@ -211,9 +211,18 @@
 # we can give `unarchive` a `creates:` guard — without it, ansible always
 # reports "changed" for ZIPs whose archive entries don't have a separate
 # top-level dir record (go-plugin, JPA Buddy, makefile, …).
+# Use python's zipfile (always available — Ansible needs python anyway)
+# instead of `unzip -Z` so this works on BusyBox/Alpine controllers too.
 - name: Resolve top-level dir of each IntelliJ ZIP plugin (controller-side)
   ansible.builtin.command:
-    cmd: "unzip -Z -1 {{ role_path }}/files/{{ app_intellij_plugins_subdir }}/{{ item }}"
+    argv:
+      - python3
+      - -c
+      - |
+        import sys, zipfile
+        names = zipfile.ZipFile(sys.argv[1]).namelist()
+        print(names[0].split('/', 1)[0] if names else '')
+      - "{{ role_path }}/files/{{ app_intellij_plugins_subdir }}/{{ item }}"
   register: app_intellij_plugin_zip_listings
   changed_when: false
   delegate_to: localhost
@@ -228,10 +237,10 @@
     dest: "{{ app_intellij_user_plugins_dir }}"
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
-    creates: "{{ app_intellij_user_plugins_dir }}/{{ item.stdout_lines | first | split('/') | first }}"
+    creates: "{{ app_intellij_user_plugins_dir }}/{{ item.stdout | trim }}"
   loop: "{{ app_intellij_plugin_zip_listings.results }}"
   loop_control:
-    label: "{{ item.item }} -> {{ item.stdout_lines | first | split('/') | first }}"
+    label: "{{ item.item }} -> {{ item.stdout | trim }}"
 
 - name: Install IntelliJ JAR plugins into the user plugins dir
   ansible.builtin.copy:
