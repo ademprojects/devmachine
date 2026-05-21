@@ -17,7 +17,8 @@ PYENV_DIR="$REPO_ROOT/roles/app_pyenv/files"
 NVM_DIR="$REPO_ROOT/roles/app_nvm/files"
 GO_DIR="$REPO_ROOT/roles/app_go/files"
 MAVEN_DIR="$REPO_ROOT/roles/app_maven/files"
-mkdir -p "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR" "$NVM_DIR" "$GO_DIR" "$MAVEN_DIR"
+VSCODE_DIR="$REPO_ROOT/roles/app_vscode/files"
+mkdir -p "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR" "$NVM_DIR" "$GO_DIR" "$MAVEN_DIR" "$VSCODE_DIR"
 
 curl_opts=( --fail --location --retry 3 --connect-timeout 15 --show-error )
 
@@ -212,6 +213,33 @@ for ver in "${MAVEN_VERSIONS[@]}"; do
   assert_nonempty "$MAVEN_DIR/$mvn_file" "Maven ${ver}"
 done
 
+# ---- VS Code (RPM + Remote-SSH server tarball) ----------------------------
+# Both fetched at "latest stable". The server tarball's redirect URL contains
+# the commit hash — we extract it and bake it into the filename so the role
+# can place the tarball at ~/.vscode-server/bin/<commit>/, which is where
+# VS Code Desktop looks for an already-installed server (no online fetch on
+# first Remote-SSH connect).
+
+echo ">>> Cleaning previous VS Code files in $VSCODE_DIR"
+cleanup_dir "$VSCODE_DIR"
+
+echo ">>> Downloading latest VS Code Linux RPM"
+(cd "$VSCODE_DIR" && curl "${curl_opts[@]}" --remote-header-name --remote-name \
+  "https://update.code.visualstudio.com/latest/linux-rpm-x64/stable")
+vscode_rpm=$(newest_in "$VSCODE_DIR")
+assert_nonempty "$vscode_rpm" "VS Code RPM"
+
+echo ">>> Resolving VS Code Server commit (latest stable)"
+server_final_url=$(curl -sIL "https://update.code.visualstudio.com/latest/server-linux-x64/stable" \
+  | awk 'tolower($1)=="location:" {print $2}' | tail -1 | tr -d '\r')
+vscode_commit=$(echo "$server_final_url" | grep -oE '[a-f0-9]{40}' | head -1)
+[[ -n "$vscode_commit" ]] || { echo "ERROR: could not extract VS Code Server commit from $server_final_url" >&2; exit 1; }
+echo ">>> Downloading VS Code Server (commit ${vscode_commit})"
+curl "${curl_opts[@]}" \
+  --output "$VSCODE_DIR/vscode-server-linux-x64-${vscode_commit}.tar.gz" \
+  "$server_final_url"
+assert_nonempty "$VSCODE_DIR/vscode-server-linux-x64-${vscode_commit}.tar.gz" "VS Code Server"
+
 echo ""
 echo "Done."
 echo ""
@@ -236,6 +264,9 @@ echo ""
 echo "Maven files:"
 ls -lh "$MAVEN_DIR" | grep -Ev '^total|\.gitkeep' || true
 echo ""
+echo "VS Code files:"
+ls -lh "$VSCODE_DIR" | grep -Ev '^total|\.gitkeep' || true
+echo ""
 echo "SHA256 (paste into host_vars / role defaults if pinning):"
-find "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR" "$NVM_DIR" "$GO_DIR" "$MAVEN_DIR" -type f ! -name '.gitkeep' -print0 \
+find "$POSTMAN_DIR" "$NEXTCLOUD_DIR" "$KEEPASSXC_DIR" "$PYENV_DIR" "$NVM_DIR" "$GO_DIR" "$MAVEN_DIR" "$VSCODE_DIR" -type f ! -name '.gitkeep' -print0 \
   | sort -z | xargs -0 -r sha256sum

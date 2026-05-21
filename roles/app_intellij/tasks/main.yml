@@ -132,6 +132,85 @@
   ansible.builtin.set_fact:
     app_intellij_user_plugins_dir: "{{ vm_owner_home }}/.local/share/JetBrains/{{ app_intellij_data_dir_name | trim }}/plugins"
 
+# Relocate JetBrains per-user data + cache off the OS disk. Plugins +
+# indexes + caches can grow to multiple GB — putting them in /mnt/data
+# keeps /home on the small OS disk lean. Symlinks must exist before any
+# task writes to ~vm_owner/.local/share/JetBrains/... (plugin deploy
+# below transparently follows the symlink).
+- name: Ensure JetBrains data-disk base directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+  loop:
+    - "{{ common_storage_mount_point | default('/mnt/data') }}/jetbrains/data"
+    - "{{ common_storage_mount_point | default('/mnt/data') }}/jetbrains/cache"
+
+- name: Ensure ~vm_owner/.local/share and ~/.cache parent dirs exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+  loop:
+    - "{{ vm_owner_home }}/.local/share"
+    - "{{ vm_owner_home }}/.cache"
+
+- name: Stat existing ~vm_owner/.local/share/JetBrains path
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/.local/share/JetBrains"
+  register: app_intellij_data_link_stat
+
+- name: Refuse to clobber an existing real ~/.local/share/JetBrains directory
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/.local/share/JetBrains exists as a real directory
+      (likely contents from a previous playbook run). Move its contents to
+      {{ common_storage_mount_point | default('/mnt/data') }}/jetbrains/data
+      manually and remove the directory, then re-run.
+  when:
+    - app_intellij_data_link_stat.stat.exists
+    - app_intellij_data_link_stat.stat.isdir
+    - not app_intellij_data_link_stat.stat.islnk
+
+- name: Stat existing ~vm_owner/.cache/JetBrains path
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/.cache/JetBrains"
+  register: app_intellij_cache_link_stat
+
+- name: Refuse to clobber an existing real ~/.cache/JetBrains directory
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/.cache/JetBrains exists as a real directory.
+      Move its contents to
+      {{ common_storage_mount_point | default('/mnt/data') }}/jetbrains/cache
+      manually and remove the directory, then re-run.
+  when:
+    - app_intellij_cache_link_stat.stat.exists
+    - app_intellij_cache_link_stat.stat.isdir
+    - not app_intellij_cache_link_stat.stat.islnk
+
+- name: Symlink ~vm_owner/.local/share/JetBrains to data-disk dir
+  ansible.builtin.file:
+    src: "{{ common_storage_mount_point | default('/mnt/data') }}/jetbrains/data"
+    dest: "{{ vm_owner_home }}/.local/share/JetBrains"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    force: true
+
+- name: Symlink ~vm_owner/.cache/JetBrains to data-disk dir
+  ansible.builtin.file:
+    src: "{{ common_storage_mount_point | default('/mnt/data') }}/jetbrains/cache"
+    dest: "{{ vm_owner_home }}/.cache/JetBrains"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    force: true
+
 - name: Discover IntelliJ plugin files in role files
   ansible.builtin.set_fact:
     app_intellij_plugin_files: >-

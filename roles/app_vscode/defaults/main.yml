@@ -1,8 +1,15 @@
 ---
-app_vscode_rpm: code-1.120.0-1778619100.el8.x86_64.rpm
+# VS Code RPM + Remote-SSH server tarball are both fetched on the controller
+# by tools/download-tools.sh (latest stable) and land in
+# roles/app_vscode/files/ — the role auto-discovers exactly one of each.
 app_vscode_sha256: ""
 app_vscode_package_dir: "{{ common_storage_mount_point | default('/mnt/data') }}/apps/packages"
 app_vscode_plugins_subdir: plugins
+
+# Where to extract the bundled vscode-server tarball. Symlinked into
+# ~vm_owner/.vscode-server so VS Code Desktop's Remote-SSH connect finds
+# the matching server pre-installed and skips its online fetch.
+app_vscode_server_install_base: "{{ common_storage_mount_point | default('/mnt/data') }}/vscode-server"
 
 # Proxy bootstrap for ~/.config/Code/User/settings.json. Written with
 # force: false — VS Code itself updates this file when the user changes

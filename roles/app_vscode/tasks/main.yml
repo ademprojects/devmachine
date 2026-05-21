@@ -5,19 +5,31 @@
     state: directory
     mode: "0755"
 
-- name: Check VS Code RPM presence in role files
-  ansible.builtin.stat:
-    path: "{{ role_path }}/files/{{ app_vscode_rpm }}"
-  register: app_vscode_rpm_local_stat
-  delegate_to: localhost
-  become: false
+- name: Discover VS Code RPM in role files
+  ansible.builtin.set_fact:
+    app_vscode_rpm_files: >-
+      {{ query('fileglob', role_path ~ '/files/code-*.rpm')
+         | map('basename') | sort | list }}
+
+- name: Fail when no VS Code RPM is bundled
+  ansible.builtin.fail:
+    msg: >-
+      No VS Code RPM found in roles/app_vscode/files/.
+      Run `tools/download-tools.sh` on the controller to fetch the latest one.
+  when: app_vscode_rpm_files | length == 0
   run_once: true
 
-- name: Fail when VS Code RPM is missing from role files
+- name: Fail when more than one VS Code RPM is bundled
   ansible.builtin.fail:
-    msg: "VS Code RPM not found at {{ role_path }}/files/{{ app_vscode_rpm }}"
-  when: not app_vscode_rpm_local_stat.stat.exists
+    msg: >-
+      Multiple VS Code RPMs found in roles/app_vscode/files/
+      ({{ app_vscode_rpm_files | join(', ') }}). Keep only one.
+  when: app_vscode_rpm_files | length > 1
   run_once: true
+
+- name: Resolve active VS Code RPM filename
+  ansible.builtin.set_fact:
+    app_vscode_rpm: "{{ app_vscode_rpm_files[0] }}"
 
 - name: Discover VS Code plugin VSIX files in role files
   ansible.builtin.set_fact:
@@ -31,8 +43,8 @@
 - name: Report discovered VS Code plugins
   ansible.builtin.debug:
     msg: >-
-      Found {{ app_vscode_plugin_files | length }} VS Code plugin file(s) under
-      roles/app_vscode/files/{{ app_vscode_plugins_subdir }}/.
+      VS Code RPM: {{ app_vscode_rpm }};
+      {{ app_vscode_plugin_files | length }} plugin VSIX(s) discovered.
 
 - name: Copy VS Code RPM to remote host
   ansible.builtin.copy:
@@ -96,3 +108,93 @@
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
     mode: "0755"
+
+# ---- Remote-SSH server bundle ---------------------------------------------
+# VS Code Desktop on Windows looks for ~/.vscode-server/bin/<commit>/ on
+# first Remote-SSH connect and downloads from update.code.visualstudio.com
+# if missing — which fails on air-gapped hosts. tools/download-tools.sh
+# bundles the matching server tarball as vscode-server-linux-x64-<commit>.tar.gz;
+# we extract it into the right path and symlink ~vm_owner/.vscode-server
+# to the data-disk install base so the server tree doesn't fill /home.
+
+- name: Discover bundled VS Code Server tarball in role files
+  ansible.builtin.set_fact:
+    app_vscode_server_tarball_files: >-
+      {{ query('fileglob', role_path ~ '/files/vscode-server-linux-x64-*.tar.gz')
+         | map('basename') | sort | list }}
+
+- name: Fail when no VS Code Server tarball is bundled
+  ansible.builtin.fail:
+    msg: >-
+      No vscode-server-linux-x64-<commit>.tar.gz in roles/app_vscode/files/.
+      Run `tools/download-tools.sh` on the controller to fetch the latest one.
+  when: app_vscode_server_tarball_files | length == 0
+  run_once: true
+
+- name: Fail when more than one VS Code Server tarball is bundled
+  ansible.builtin.fail:
+    msg: >-
+      Multiple VS Code Server tarballs found
+      ({{ app_vscode_server_tarball_files | join(', ') }}). Keep only one.
+  when: app_vscode_server_tarball_files | length > 1
+  run_once: true
+
+- name: Derive VS Code Server commit from tarball name
+  ansible.builtin.set_fact:
+    app_vscode_server_commit: >-
+      {{ app_vscode_server_tarball_files[0]
+         | regex_replace('^vscode-server-linux-x64-([a-f0-9]{40})\\.tar\\.gz$', '\\1') }}
+
+- name: Ensure VS Code Server install base + bin dir exist on data disk
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+  loop:
+    - "{{ app_vscode_server_install_base }}"
+    - "{{ app_vscode_server_install_base }}/bin"
+
+- name: Ensure versioned VS Code Server directory exists
+  ansible.builtin.file:
+    path: "{{ app_vscode_server_install_base }}/bin/{{ app_vscode_server_commit }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+
+- name: Extract VS Code Server tarball into versioned directory
+  ansible.builtin.unarchive:
+    src: "{{ app_vscode_server_tarball_files[0] }}"
+    dest: "{{ app_vscode_server_install_base }}/bin/{{ app_vscode_server_commit }}"
+    extra_opts:
+      - --strip-components=1
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    creates: "{{ app_vscode_server_install_base }}/bin/{{ app_vscode_server_commit }}/bin/code-server"
+
+- name: Stat existing ~/.vscode-server path
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/.vscode-server"
+  register: app_vscode_server_home_link
+
+- name: Refuse to clobber an existing real ~/.vscode-server directory
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/.vscode-server exists as a real directory.
+      Move its contents to {{ app_vscode_server_install_base }} manually and
+      remove the directory, then re-run the playbook.
+  when:
+    - app_vscode_server_home_link.stat.exists
+    - app_vscode_server_home_link.stat.isdir
+    - not app_vscode_server_home_link.stat.islnk
+
+- name: Symlink ~/.vscode-server to the data-disk install base
+  ansible.builtin.file:
+    src: "{{ app_vscode_server_install_base }}"
+    dest: "{{ vm_owner_home }}/.vscode-server"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    force: true
