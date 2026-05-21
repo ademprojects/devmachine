@@ -69,6 +69,22 @@
     - app_git_repos | length > 0
     - vm_owner_ssh_privkey | length == 0
 
+# Pre-create each repo's target directory so the generated VS Code workspace
+# (devmachine.code-workspace) and IntelliJ recent projects open cleanly even
+# before the first-login clone runs. `git clone` is happy with an existing
+# empty directory.
+- name: Pre-create repo target directories
+  ansible.builtin.file:
+    path: "{{ item.target }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+  loop: "{{ app_git_repos }}"
+  loop_control:
+    label: "{{ item.target }}"
+  when: app_git_repos | length > 0
+
 # Repo clones happen at first user login (not during the Ansible run): the SSH
 # key is passphrase-encrypted, so we need gnome-keyring's ssh-agent to be
 # available — which only happens after pam_gnome_keyring unlocks the keyring at
