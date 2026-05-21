@@ -30,6 +30,12 @@ if ! command -v xfconf-query >/dev/null 2>&1; then
     exit 0
 fi
 
+# Beim Autostart kann panel-2 noch nicht voll initialisiert sein — kurze
+# Wartezeit, damit xfconf-query bereits gesetzte plugin-ids sieht.
+# X-GNOME-Autostart-Delay im .desktop wirkt nur in GNOME, deswegen hier
+# explizit, damit es unter XFCE genauso greift.
+sleep "${DEVMACHINE_PANEL_DELAY:-5}"
+
 # Reihenfolge in der die Plugins in der Leiste erscheinen sollen.
 # Format pro Zeile: "<type>|<payload>"
 #   launcher|<desktop>       — Launcher für /usr/share/applications/<desktop>

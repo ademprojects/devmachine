@@ -5,4 +5,6 @@ Comment=Adds dev-app launchers to the bottom panel on first login (one-shot).
 Exec={{ vm_owner_home }}/.local/bin/devmachine-setup-panel.sh
 NoDisplay=true
 Terminal=false
+# Delay is honoured by GNOME's autostart, ignored by XFCE. The script
+# applies the same wait via `sleep` so it works in both DEs.
 X-GNOME-Autostart-Delay=5
