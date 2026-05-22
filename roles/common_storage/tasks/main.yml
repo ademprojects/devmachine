@@ -250,3 +250,42 @@
     regexp: '^TMPDIR='
     state: absent
   when: common_storage_tmpdir_path | length == 0
+
+# ---------------------------------------------------------------------------
+# Concern 4: drop noexec from /tmp via tmp.mount drop-in.
+# ---------------------------------------------------------------------------
+
+- name: Ensure tmp.mount drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/tmp.mount.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: common_storage_tmp_remove_noexec | bool
+
+- name: Override /tmp mount options (drop noexec, keep nosuid+nodev)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/tmp.mount.d/devmachine.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Ansible-managed (roles/common_storage). Removes noexec from /tmp so
+      # daemons that exec scratch files (JetBrains helpers, JNI loaders,
+      # npm postinstall scripts) work without an explicit TMPDIR override.
+      # nosuid + nodev are kept — the attack surface remains limited.
+      # Takes effect at next boot, or via:
+      #   systemctl daemon-reload && systemctl restart tmp.mount
+      # (mount restart only safe when nothing in /tmp is in use.)
+      [Mount]
+      Options={{ common_storage_tmp_mount_options }}
+  when: common_storage_tmp_remove_noexec | bool
+  notify: Reload systemd
+
+- name: Remove tmp.mount drop-in when noexec removal is disabled
+  ansible.builtin.file:
+    path: /etc/systemd/system/tmp.mount.d/devmachine.conf
+    state: absent
+  when: not (common_storage_tmp_remove_noexec | bool)
+  notify: Reload systemd

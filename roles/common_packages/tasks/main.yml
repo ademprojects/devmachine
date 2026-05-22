@@ -23,3 +23,9 @@
     name: "*"
     state: latest
   when: common_packages_full_update_enabled | bool
+
+- name: Install extra system packages
+  ansible.builtin.dnf:
+    name: "{{ common_packages_extra }}"
+    state: present
+  when: common_packages_extra | length > 0

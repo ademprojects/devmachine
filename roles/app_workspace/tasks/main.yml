@@ -43,7 +43,7 @@
 
 - name: Ensure data-disk XDG dirs exist
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ common_storage_mount_point | default('/mnt/data') }}/{{ item }}"
     state: directory
     owner: "{{ vm_owner_name }}"
     group: "{{ vm_owner_group }}"
@@ -51,8 +51,10 @@
     setype: user_home_t
     seuser: system_u
   loop:
-    - "{{ common_storage_mount_point | default('/mnt/data') }}/cache"
-    - "{{ common_storage_mount_point | default('/mnt/data') }}/local"
+    - cache
+    - local
+    - npm
+    - pip
 
 - name: Stat existing ~vm_owner XDG dirs
   ansible.builtin.stat:
@@ -61,8 +63,10 @@
   loop:
     - .cache
     - .local
+    - .npm
+    - .pip
 
-- name: Refuse to clobber existing real ~/.cache or ~/.local directories
+- name: Refuse to clobber existing real ~/.cache / ~/.local / ~/.npm / ~/.pip directories
   ansible.builtin.fail:
     msg: >-
       {{ vm_owner_home }}/{{ item.item }} exists as a real directory
@@ -90,5 +94,7 @@
   loop:
     - { link: .cache, dest: cache }
     - { link: .local, dest: local }
+    - { link: .npm,   dest: npm }
+    - { link: .pip,   dest: pip }
   loop_control:
     label: "{{ item.link }} -> {{ item.dest }}"

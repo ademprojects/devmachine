@@ -4,6 +4,36 @@
     name: "{{ app_cli_packages }}"
     state: present
 
+# Bash defaults for every login shell (xfce4-terminal, ssh, mosh, sudo -i).
+# Sourced through /etc/profile -> /etc/profile.d/*.sh. Non-login subshells
+# inherit env via the parent process, so HISTSIZE etc. propagate transparently.
+- name: Write /etc/profile.d snippet with bash history + timeout defaults
+  ansible.builtin.copy:
+    dest: "{{ app_cli_bash_profile_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Ansible-managed (roles/app_cli). System-wide bash defaults.
+      export HISTSIZE={{ app_cli_bash_histsize }}
+      export HISTFILESIZE={{ app_cli_bash_histfilesize }}
+      export HISTCONTROL="{{ app_cli_bash_histcontrol }}"
+      export HISTTIMEFORMAT="{{ app_cli_bash_histtimeformat }}"
+      {% if (app_cli_bash_tmout | int) > 0 %}
+      export TMOUT={{ app_cli_bash_tmout }}
+      {% else %}
+      unset TMOUT
+      {% endif %}
+      shopt -s histappend
+      {% if app_cli_bash_history_append | bool %}
+      # Flush each command to ~/.bash_history immediately, so a disconnected
+      # ssh / killed terminal doesn't lose what you typed.
+      case "${PROMPT_COMMAND:-}" in
+          *"history -a"*) ;;
+          *) PROMPT_COMMAND="history -a${PROMPT_COMMAND:+; $PROMPT_COMMAND}" ;;
+      esac
+      {% endif %}
+
 - name: Gather service facts
   ansible.builtin.service_facts:
   when: app_cli_mosh_open_firewall | bool

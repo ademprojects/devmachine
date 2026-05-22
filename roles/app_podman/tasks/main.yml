@@ -282,11 +282,40 @@
   when: app_podman_auth_json is defined
   no_log: true
 
+# ---- profile.d: pin REGISTRY_AUTH_FILE for interactive shells -------------
+# podman's auth.json discovery order is REGISTRY_AUTH_FILE →
+# $XDG_RUNTIME_DIR/containers/auth.json → $HOME/.config/containers/auth.json.
+# Setting REGISTRY_AUTH_FILE explicitly means a shell without a working
+# logind session (or with a non-standard XDG_RUNTIME_DIR) still finds the
+# file we deployed at $HOME/.config/containers/auth.json.
+
+- name: Write /etc/profile.d snippet for podman auth.json lookup
+  ansible.builtin.copy:
+    dest: "{{ app_podman_profile_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Ansible-managed (roles/app_podman). Pin REGISTRY_AUTH_FILE for
+      # interactive (login) shells so `podman pull|login|push` finds the
+      # auth.json deployed under ~/.config/containers/ even if XDG_RUNTIME_DIR
+      # is unset. systemd-spawned podman uses containers.conf [engine] env
+      # for proxy + the daemon-side config — not this file.
+      if [ -f "$HOME/.config/containers/auth.json" ]; then
+          export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
+      fi
+
 # ---- Verification ----
 
 - name: Verify rootless podman works for vm_owner
-  ansible.builtin.command:
-    cmd: podman info
+  ansible.builtin.shell:
+    cmd: |
+      set -uo pipefail
+      echo "HOME=${HOME:-<unset>}"
+      echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-<unset>}"
+      echo "REGISTRY_AUTH_FILE=${REGISTRY_AUTH_FILE:-<unset>}"
+      echo "auth.json present: $(test -f "$HOME/.config/containers/auth.json" && echo yes || echo no)"
+      podman info
   become: true
   become_user: "{{ vm_owner_name }}"
   environment:
@@ -303,5 +332,45 @@
       - app_podman_info_check.rc == 0
     fail_msg: >-
       podman info failed for {{ vm_owner_name }}.
+      diagnostic head:
+      {{ app_podman_info_check.stdout_lines[:4] | default([]) | join(' | ') }}
       stderr={{ app_podman_info_check.stderr | default('') | trim }}
   when: app_podman_verify_rootless | bool
+
+# ---- Pre-pull configured images (rootless) -------------------------------
+# Two-step pattern keeps re-runs cheap: first check existence per image
+# (idempotent, never marked changed), then pull only the missing ones.
+# REGISTRY_AUTH_FILE is set explicitly so the pull uses the auth.json we
+# deployed even if XDG_RUNTIME_DIR is missing from the elevated session.
+
+- name: Check which configured podman images are already present locally
+  ansible.builtin.command:
+    cmd: "podman image exists {{ item }}"
+  become: true
+  become_user: "{{ vm_owner_name }}"
+  environment:
+    HOME: "{{ vm_owner_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ vm_owner_uid }}"
+  register: app_podman_image_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ app_podman_images_to_pull }}"
+  loop_control:
+    label: "{{ item }}"
+  when: app_podman_images_to_pull | length > 0
+
+- name: Pull configured podman images (rootless, vm_owner)
+  ansible.builtin.command:
+    cmd: "podman pull {{ item.item }}"
+  become: true
+  become_user: "{{ vm_owner_name }}"
+  environment:
+    HOME: "{{ vm_owner_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ vm_owner_uid }}"
+    REGISTRY_AUTH_FILE: "{{ vm_owner_home }}/.config/containers/auth.json"
+  loop: "{{ app_podman_image_check.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - app_podman_images_to_pull | length > 0
+    - (item.rc | default(0)) != 0

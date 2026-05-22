@@ -24,3 +24,23 @@ app_cli_packages:
 app_cli_mosh_open_firewall: true
 app_cli_mosh_firewall_port_min: 60000
 app_cli_mosh_firewall_port_max: 61000
+
+# System-wide bash defaults — written to /etc/profile.d/, picked up by every
+# login shell (xfce4-terminal, ssh, mosh). Non-login bash (`bash` from a
+# subshell) inherits via /etc/bashrc -> /etc/profile sourcing in normal setups.
+app_cli_bash_profile_path: /etc/profile.d/app-cli-bash.sh
+# History sizes — RHEL default is 1000/1000 which fills up in a day on a
+# dev machine. 100k entries ≈ a few MB of ~/.bash_history per user, no issue.
+app_cli_bash_histsize: 100000
+app_cli_bash_histfilesize: 100000
+# ignoredups skips a command if it matches the previous one;
+# erasedups also removes earlier identical entries on save.
+app_cli_bash_histcontrol: "ignoredups:erasedups"
+app_cli_bash_histtimeformat: "%F %T "
+# Idle timeout. RHEL hardening profiles often set TMOUT=900 (15min auto-logout).
+# 0 = unset (no idle timeout). Override per host_vars if you want enforcement.
+app_cli_bash_tmout: 0
+# Flush each command into ~/.bash_history immediately so disconnected
+# sessions don't lose history. Set to false to keep the bash default
+# (flush on shell exit only).
+app_cli_bash_history_append: true

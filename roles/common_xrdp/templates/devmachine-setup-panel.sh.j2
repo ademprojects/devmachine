@@ -1,13 +1,15 @@
 #!/bin/bash
 {% raw %}
-# Ansible-managed (roles/common_xrdp). Beim ersten Login ergänzt das die
-# untere XFCE-Leiste (panel-2) um Launcher für die wichtigsten Dev-Apps.
-# Sentinel verhindert mehrfaches Anhängen bei späteren Sessions; das Script
-# entfernt sich + den Autostart-Eintrag wenn der Sentinel sitzt.
+# Ansible-managed (roles/common_xrdp). Adds launcher plugins to the bottom
+# XFCE panel on first login. Re-run manually with `--force` to retry.
+#
 # Body in {% raw %} gewrappt, weil bash's array-length-Syntax ${#arr[@]}
 # sonst von Jinja als Comment-Start interpretiert wird.
 
 set -uo pipefail
+
+FORCE=0
+[ "${1:-}" = "--force" ] && FORCE=1
 
 SENTINEL="${HOME}/.cache/devmachine-panel-configured"
 LOG="${HOME}/.local/state/devmachine-setup-panel.log"
@@ -17,9 +19,10 @@ SELF="$(readlink -f "$0")"
 mkdir -p "$(dirname "$LOG")" "$(dirname "$SENTINEL")"
 exec >>"$LOG" 2>&1
 echo
-echo "=== $(date -Is) panel setup (pid $$) ==="
+echo "=== $(date -Is) panel setup (pid $$, force=$FORCE) ==="
+echo "DISPLAY=${DISPLAY:-<unset>}  DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-<unset>}"
 
-if [ -f "$SENTINEL" ]; then
+if [ -f "$SENTINEL" ] && [ "$FORCE" -ne 1 ]; then
     echo "sentinel exists — already configured; removing autostart + self"
     rm -f "$AUTOSTART" "$SELF"
     exit 0
@@ -30,8 +33,8 @@ if ! command -v xfconf-query >/dev/null 2>&1; then
     exit 0
 fi
 
-# Beim Autostart kann panel-2 noch nicht voll initialisiert sein — kurze
-# Wartezeit, damit xfconf-query bereits gesetzte plugin-ids sieht.
+# Beim Autostart kann das Panel noch nicht voll initialisiert sein —
+# kurz warten, damit xfconf-query bereits gesetzte plugin-ids sieht.
 # X-GNOME-Autostart-Delay im .desktop wirkt nur in GNOME, deswegen hier
 # explizit, damit es unter XFCE genauso greift.
 sleep "${DEVMACHINE_PANEL_DELAY:-5}"
@@ -49,6 +52,59 @@ PLUGINS=(
   "launcher|jetbrains-idea.desktop"
   "launcher|keepassxc.desktop"
 )
+
+# Diagnostik: alle Panels listen, damit klar wird auf was wir zielen.
+echo "--- existing panels ---"
+xfconf-query -c xfce4-panel -l 2>/dev/null | grep -E '^/panels/panel-[0-9]+($|/)' \
+    | sort -u || true
+echo "-----------------------"
+
+# Pick target panel:
+#   1. expliziter Override via $DEVMACHINE_PANEL_TARGET (z.B. "panel-2")
+#   2. erstes Panel das laut "position" am unteren Bildschirmrand sitzt
+#      (xfconf-Wert hat das Token "p=8;" oder "p=9;" für bottom-attached)
+#   3. fallback: panel-2 (RHEL XFCE-Default), sonst das letzte existierende Panel
+pick_bottom_panel() {
+    if [ -n "${DEVMACHINE_PANEL_TARGET:-}" ]; then
+        echo "$DEVMACHINE_PANEL_TARGET"
+        return
+    fi
+    local p pos
+    local panels
+    panels=$(xfconf-query -c xfce4-panel -l 2>/dev/null \
+        | grep -oE '/panels/panel-[0-9]+' | sort -u)
+    for p in $panels; do
+        pos=$(xfconf-query -c xfce4-panel -p "$p/position" 2>/dev/null || true)
+        case "$pos" in
+            *"p=8"*|*"p=9"*) echo "${p#/panels/}"; return ;;
+        esac
+    done
+    if [ -n "${panels:-}" ]; then
+        # Last panel as fallback
+        echo "$panels" | tail -1 | sed 's|^/panels/||'
+    else
+        echo "panel-2"
+    fi
+}
+
+TARGET_PANEL="$(pick_bottom_panel)"
+echo "target panel: $TARGET_PANEL"
+
+# Sicherstellen dass das Ziel-Panel überhaupt existiert. Wenn nicht: anlegen
+# und in die Liste der Panels eintragen (sonst akzeptiert xfconf das Schreiben
+# auf /panels/panel-N/plugin-ids nicht).
+existing_panel_ids=$(xfconf-query -c xfce4-panel -p /panels 2>/dev/null \
+    | grep -E '^[0-9]+$' | sort -un | tr '\n' ' ' || true)
+target_id="${TARGET_PANEL#panel-}"
+if ! echo " $existing_panel_ids " | grep -q " $target_id "; then
+    echo "panel $TARGET_PANEL (id $target_id) doesn't exist — creating"
+    new_panel_args=()
+    for id in $existing_panel_ids $target_id; do
+        new_panel_args+=(-t int -s "$id")
+    done
+    xfconf-query -c xfce4-panel -p /panels "${new_panel_args[@]}" \
+        --create --force-array || echo "WARN: could not register $TARGET_PANEL" >&2
+fi
 
 # Nächste freie Plugin-ID = aktuelles Max + 1
 existing_max=$(xfconf-query -c xfce4-panel -l 2>/dev/null \
@@ -68,12 +124,18 @@ for entry in "${PLUGINS[@]}"; do
                 continue
             fi
             echo "adding launcher plugin-$next_id for $payload"
-            xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id" -n -t string -s "launcher"
-            xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id/items" -n -t string -s "$payload" -a
+            if ! xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id" -n -t string -s "launcher"; then
+                echo "FAILED to create plugin-$next_id slot" >&2
+                next_id=$(( next_id + 1 ))
+                continue
+            fi
+            xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id/items" -n -t string -s "$payload" -a \
+                || echo "FAILED to set items on plugin-$next_id" >&2
             ;;
         plugin)
             echo "adding builtin plugin-$next_id ($payload)"
-            xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id" -n -t string -s "$payload"
+            xfconf-query -c xfce4-panel -p "/plugins/plugin-$next_id" -n -t string -s "$payload" \
+                || { echo "FAILED to create plugin-$next_id ($payload)" >&2; next_id=$(( next_id + 1 )); continue; }
             ;;
         *)
             echo "WARN: unknown entry type '$ptype' — skipping"
@@ -84,20 +146,30 @@ for entry in "${PLUGINS[@]}"; do
     next_id=$(( next_id + 1 ))
 done
 
+append_ok=1
 if [ "${#new_ids[@]}" -gt 0 ]; then
     args=()
     for id in "${new_ids[@]}"; do
         args+=(-t int -s "$id")
     done
-    # An die existierenden plugin-ids von panel-2 anhängen
-    xfconf-query -c xfce4-panel -p /panels/panel-2/plugin-ids "${args[@]}" -a \
-        || echo "WARN: could not append plugin-ids to panel-2" >&2
+    if ! xfconf-query -c xfce4-panel -p "/panels/$TARGET_PANEL/plugin-ids" "${args[@]}" -a; then
+        echo "WARN: append to /panels/$TARGET_PANEL/plugin-ids failed — trying --create" >&2
+        # Wenn das array noch nicht existiert oder das panel frisch ist:
+        if ! xfconf-query -c xfce4-panel -p "/panels/$TARGET_PANEL/plugin-ids" "${args[@]}" \
+                --create --force-array; then
+            echo "ERROR: could not write plugin-ids on $TARGET_PANEL" >&2
+            append_ok=0
+        fi
+    fi
 fi
 
-# Panel neu starten, damit die Launcher sofort erscheinen
 xfce4-panel --restart >/dev/null 2>&1 || true
 
-touch "$SENTINEL"
-echo "done — removing autostart + self"
-rm -f "$AUTOSTART" "$SELF"
+if [ "$append_ok" -eq 1 ] && [ "${#new_ids[@]}" -gt 0 ]; then
+    touch "$SENTINEL"
+    echo "done — removing autostart + self"
+    rm -f "$AUTOSTART" "$SELF"
+else
+    echo "leaving autostart + self in place — next session will retry" >&2
+fi
 {% endraw %}

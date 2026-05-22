@@ -106,12 +106,32 @@
   ansible.builtin.set_fact:
     app_intellij_home: "{{ app_intellij_extracted_dirs.files[0].path }}"
 
-- name: Symlink IntelliJ launcher
+# /tmp is mounted noexec on hardened RHEL builds; the IntelliJ daemon
+# (helpers, jspawnhelper, fsnotifier-shim) extracts native libs and execs
+# them, which fails with "Operation not permitted" on noexec mounts.
+# Replace the plain symlink with a wrapper that exports TMPDIR before
+# exec'ing idea.sh so every child process inherits the data-disk tmp.
+# `idea.vmoptions` further down sets -Djava.io.tmpdir for the JVM itself.
+
+- name: Remove any prior IntelliJ launcher symlink
   ansible.builtin.file:
-    src: "{{ app_intellij_home }}/bin/idea.sh"
+    path: "{{ app_intellij_symlink }}"
+    state: absent
+
+- name: Write IntelliJ launcher wrapper (sets TMPDIR before exec)
+  ansible.builtin.copy:
     dest: "{{ app_intellij_symlink }}"
-    state: link
-    force: true
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Ansible-managed (roles/app_intellij). Forces TMPDIR onto the data
+      # disk so IntelliJ + every child process avoids noexec /tmp.
+      export TMPDIR="{{ common_storage_tmpdir_path | default('/mnt/data/tmp') }}"
+      export TMP="$TMPDIR"
+      export TEMP="$TMPDIR"
+      exec "{{ app_intellij_home }}/bin/idea.sh" "$@"
 
 # Resolve the per-version config dir name (e.g. "IntelliJIdea2026.1") from
 # product-info.json — IntelliJ 2020+ reads user-installed plugins from
@@ -181,6 +201,20 @@
       # talks to marketplace.
       plugin.advertiser.enable.update.notifications=false
       plugin.advertiser.enable.suggestion=false
+
+# idea64.vmoptions is APPENDED to the bundled <IDE>/bin/idea64.vmoptions —
+# we only need the data-disk overrides here. -Djava.io.tmpdir is what the
+# JVM itself uses for File.createTempFile, native lib extracts, etc.
+- name: Write user-level idea64.vmoptions (java.io.tmpdir override)
+  ansible.builtin.copy:
+    dest: "{{ app_intellij_user_config_dir }}/idea64.vmoptions"
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0644"
+    content: |
+      # Managed by Ansible (roles/app_intellij). Appended to the bundled
+      # <IDE>/bin/idea64.vmoptions at JVM startup.
+      -Djava.io.tmpdir={{ common_storage_tmpdir_path | default('/mnt/data/tmp') }}
 
 - name: Discover IntelliJ plugin files in role files
   ansible.builtin.set_fact:

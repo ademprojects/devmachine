@@ -47,12 +47,41 @@
     owner: root
     group: root
 
-- name: Symlink Postman launcher
+# Postman's watcher.node demands GLIBCXX_3.4.30 (gcc 12+). RHEL 9 base
+# libstdc++ stops at 3.4.29, so pull in gcc-toolset-13's runtime and the
+# launcher wrapper below prepends its lib dir via LD_LIBRARY_PATH.
+- name: Install libstdc++ runtime with GLIBCXX_3.4.30+ for Postman
+  ansible.builtin.dnf:
+    name: "{{ app_postman_libstdcxx_packages }}"
+    state: present
+
+- name: Install Postman Electron runtime dependencies
+  ansible.builtin.dnf:
+    name: "{{ app_postman_runtime_packages }}"
+    state: present
+  when: app_postman_runtime_packages | length > 0
+
+- name: Replace any prior symlink at the Postman launcher path
   ansible.builtin.file:
-    src: "{{ app_postman_install_dir }}/{{ app_postman_executable_name }}"
+    path: "{{ app_postman_symlink }}"
+    state: absent
+
+- name: Write Postman launcher wrapper (injects newer libstdc++)
+  ansible.builtin.copy:
     dest: "{{ app_postman_symlink }}"
-    state: link
-    force: true
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Ansible-managed (roles/app_postman). Postman's @parcel/watcher
+      # native module is compiled against GLIBCXX_3.4.30 (gcc 12+).
+      # RHEL 9 base libstdc++ stops at 3.4.29, so prepend gcc-toolset-13's
+      # libstdc++.so.6.0.32 via LD_LIBRARY_PATH before exec'ing Postman.
+      # Use ${VAR:+:$VAR} pattern to avoid a trailing colon (which would
+      # add "search current dir" semantics to ld.so).
+      export LD_LIBRARY_PATH="{{ app_postman_libstdcxx_lib_dir }}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+      exec "{{ app_postman_install_dir }}/{{ app_postman_executable_name }}" "$@"
 
 # Postman's tarball ships an icon (typically app/resources/app/assets/icon.png)
 # but doesn't register it in any theme directory. Find the largest icon in the

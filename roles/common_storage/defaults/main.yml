@@ -34,3 +34,16 @@ common_storage_mount_seuser: system_u
 # SSH, which Gateway uses) pick up a writable + exec-allowed temp dir on
 # /mnt/data instead. Set to "" to disable.
 common_storage_tmpdir_path: "{{ common_storage_mount_point }}/tmp"
+
+# --- Concern 4: drop the noexec mount option from /tmp (tmp.mount).
+# Sister to Concern 3 — TMPDIR redirects newly-spawned PAM sessions, but
+# daemons/services that hardcode "/tmp" (JetBrains background helpers,
+# language servers, native build hooks) still hit noexec. Writing a
+# systemd drop-in for tmp.mount removes noexec while keeping nosuid + nodev,
+# so /tmp stays an attack-surface-limited tmpfs. CIS-Benchmark item 1.1.2.4
+# is relaxed by this — disable if you must stay CIS-conform.
+# Takes effect after `systemctl daemon-reload && systemctl restart tmp.mount`
+# (we trigger daemon-reload via handler; a reboot is the cleanest way to
+# apply the new mount options without disturbing running sessions).
+common_storage_tmp_remove_noexec: true
+common_storage_tmp_mount_options: "mode=1777,strictatime,nosuid,nodev"

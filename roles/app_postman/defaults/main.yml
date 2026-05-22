@@ -10,3 +10,52 @@ app_postman_desktop_entry: /usr/share/applications/postman.desktop
 # survives Postman's internal layout changes and shows up in icon-theme-aware
 # UIs (taskbar, notifications) consistently.
 app_postman_desktop_icon: postman
+
+# Postman bundles @parcel/watcher's watcher.node native module compiled
+# against libstdc++ from GCC 12+ (needs GLIBCXX_3.4.30). RHEL 9 base
+# libstdc++ stops at 3.4.29, so the launch fails with
+#   "version `GLIBCXX_3.4.30' not found (required by .../watcher.node)".
+# Pull in gcc-toolset-13's libstdc++ runtime (libstdc++.so.6.0.32) and
+# prepend its lib path via LD_LIBRARY_PATH in the wrapper.
+# Override e.g. to gcc-toolset-12-* if you want a smaller install.
+app_postman_libstdcxx_packages:
+  - gcc-toolset-13-gcc-c++
+app_postman_libstdcxx_lib_dir: /opt/rh/gcc-toolset-13/root/usr/lib64
+
+# Electron runtime deps. Most of these come with the @xfce4 group, but
+# Postman has crashed on RHEL minimal-install hosts with the following
+# missing, so install them explicitly. dnf de-duplicates against existing
+# installations — no harm if they're already there.
+#   nss / nspr             — TLS + network stack
+#   gtk3                   — main toolkit
+#   libdrm / mesa-libgbm   — direct rendering / GBM for offscreen
+#   libxkbcommon           — keyboard / input
+#   libXcomposite/damage/randr/scrnsaver/tst — X11 surface stack
+#   alsa-lib               — Electron always opens /dev/snd*
+#   at-spi2-atk / atk      — accessibility (a11y)
+#   pango / cairo          — text rendering
+#   libnotify              — desktop notifications
+#   libsecret              — already pulled by app_keyring; listed for clarity
+#   libxshmfence           — Chromium GPU sync
+#   xdg-utils              — `xdg-open` for "open in browser" links
+app_postman_runtime_packages:
+  - nss
+  - nspr
+  - gtk3
+  - libdrm
+  - mesa-libgbm
+  - libxkbcommon
+  - libXcomposite
+  - libXdamage
+  - libXrandr
+  - libXScrnSaver
+  - libXtst
+  - alsa-lib
+  - at-spi2-atk
+  - atk
+  - pango
+  - cairo
+  - libnotify
+  - libsecret
+  - libxshmfence
+  - xdg-utils

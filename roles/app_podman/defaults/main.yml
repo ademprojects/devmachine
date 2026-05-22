@@ -24,6 +24,12 @@ app_podman_storage_mount_program: /usr/bin/fuse-overlayfs
 app_podman_proxy_url: "{{ proxy_url }}"
 app_podman_no_proxy: "{{ common_nexus_no_proxy }}"
 
+# /etc/profile.d snippet that exports REGISTRY_AUTH_FILE for interactive
+# shells. Pinning the file path here means podman doesn't have to derive
+# it from XDG_RUNTIME_DIR / HOME at lookup time — useful if a shell ever
+# lands without a proper logind session.
+app_podman_profile_path: /etc/profile.d/app-podman.sh
+
 # Registry config — Harbor referenced and used as unqualified search target.
 # `_insecure: true` skips TLS verification (use when Harbor presents a
 # self-signed / internal-CA cert and you can't / don't want to ship the CA
@@ -62,3 +68,14 @@ app_podman_shortname_aliases:
 #       "harbor.firma.intern":
 #         auth: "BASE64_USER_PASS"
 # Undefined → role skips the auth.json deploy.
+
+# Container images to pre-pull during provisioning (rootless, as vm_owner).
+# Each entry is whatever podman accepts on the command line — a fully-qualified
+# reference like "harbor.firma.intern/library/postgres:16" or a short name
+# that resolves through registries.conf / shortnames.conf above.
+# Empty by default; populate via host_vars / group_vars, e.g.:
+#   app_podman_images_to_pull:
+#     - harbor.firma.intern/library/postgres:16
+#     - harbor.firma.intern/library/mariadb:11
+# The role skips images that already exist locally, so re-runs are cheap.
+app_podman_images_to_pull: []

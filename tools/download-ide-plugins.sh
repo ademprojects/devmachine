@@ -79,14 +79,20 @@ INTELLIJ_PLUGINS=(
   9568    # Go — full Go language support (same engine as GoLand)
   7973    # SonarQube for IDE — static analysis, formerly SonarLint
   9333    # Makefile Language — syntax highlighting + targets for Makefiles
-  24543   # Deutsch (German) Language Pack — UI-Lokalisierung
+  27355   # Deutsch (German) Language Localization — UI-Lokalisierung (free pendant zu 24543)
   7179    # MavenHelper — dependency tree, conflict resolution, "run/debug Maven goal" gutter
   10044   # Atom Material Icons — pure icon pack (no theme change), matches VS Code's material-icon-theme
 )
 
-# Optional: pin IntelliJ build for compatibility filter (leave empty for latest).
-# Example: "IIC-262.7321" (IntelliJ IDEA Community 2026.1.2 build).
-INTELLIJ_BUILD=""
+# Pin IntelliJ build so the Marketplace API only returns plugin versions
+# compatible with the bundled IDE. Without this the API ships "latest"
+# regardless of build — Go / JPA Buddy / Grazie ship 262.x (= 2026.2 EAP)
+# updates that won't load on a 261.x (= 2026.1.x) IDE.
+# Find the exact value with:
+#   cat /mnt/data/apps/jetbrains/idea-*/product-info.json | jq -r .buildNumber
+# Format is <code>-<build>, e.g. "IU-261.24374.151" for IDEA Ultimate
+# 2026.1.x, "IIC-261.24374.151" for IDEA Community.
+INTELLIJ_BUILD="IU-261.24374.151"
 # ------------------------------------------------------------------------------
 
 curl_opts=( --fail --location --retry 3 --connect-timeout 15 --show-error --silent )

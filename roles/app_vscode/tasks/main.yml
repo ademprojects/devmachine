@@ -87,6 +87,65 @@
     state: present
     disable_gpg_check: true
 
+# Relocate VS Code's per-user state to /mnt/data. ~/.vscode-server can grow
+# to GB-scale once Remote-SSH is in use (downloaded server bundles, language
+# server caches, extension data). Done before per_user.yml so extension
+# installs already land on the data disk.
+
+- name: Ensure /mnt/data/vscode/ subdirs exist
+  ansible.builtin.file:
+    path: "{{ common_storage_mount_point | default('/mnt/data') }}/vscode/{{ item }}"
+    state: directory
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    mode: "0755"
+    setype: user_home_t
+    seuser: system_u
+  loop:
+    - vscode
+    - vscode-server
+    - vscode-shared
+
+- name: Stat existing ~vm_owner VS Code dirs
+  ansible.builtin.stat:
+    path: "{{ vm_owner_home }}/{{ item }}"
+  register: app_vscode_dir_stat
+  loop:
+    - .vscode
+    - .vscode-server
+    - .vscode-shared
+
+- name: Refuse to clobber existing real ~/.vscode* directories
+  ansible.builtin.fail:
+    msg: >-
+      {{ vm_owner_home }}/{{ item.item }} exists as a real directory.
+      Move it to the data disk and remove, then re-run:
+        rsync -a {{ vm_owner_home }}/{{ item.item }}/ {{ common_storage_mount_point | default('/mnt/data') }}/vscode/{{ item.item | regex_replace('^\\.', '') }}/
+        rm -rf {{ vm_owner_home }}/{{ item.item }}
+  loop: "{{ app_vscode_dir_stat.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - item.stat.exists
+    - item.stat.isdir
+    - not item.stat.islnk
+
+- name: Symlink ~vm_owner VS Code dirs to data-disk
+  ansible.builtin.file:
+    src: "{{ common_storage_mount_point | default('/mnt/data') }}/vscode/{{ item.dest }}"
+    dest: "{{ vm_owner_home }}/{{ item.link }}"
+    state: link
+    owner: "{{ vm_owner_name }}"
+    group: "{{ vm_owner_group }}"
+    follow: false
+    force: true
+  loop:
+    - { link: .vscode,        dest: vscode }
+    - { link: .vscode-server, dest: vscode-server }
+    - { link: .vscode-shared, dest: vscode-shared }
+  loop_control:
+    label: "{{ item.link }} -> {{ item.dest }}"
+
 - name: Provision VS Code extensions for vm_owner
   ansible.builtin.include_tasks: per_user.yml
   vars:

@@ -8,3 +8,11 @@ common_packages_keepcache: false
 common_packages_best: false
 common_packages_skip_if_unavailable: false
 common_packages_full_update_enabled: false
+
+# Extra system packages every dev machine gets, on top of whatever the
+# individual roles install. JDBC client JARs live here so IntelliJ /
+# DBeaver / VS Code SQLTools can all reference the same files at
+# RPM-managed paths (/usr/share/java/...jar).
+common_packages_extra:
+  - mariadb-java-client   # /usr/share/java/mariadb-java-client.jar
+  - postgresql-jdbc       # /usr/share/java/postgresql-jdbc.jar
