@@ -5,3 +5,7 @@ Comment=One-shot — marks every ~/Desktop/*.desktop as trusted, then self-remov
 Exec={{ vm_owner_home }}/.local/bin/devmachine-trust-desktop.sh
 NoDisplay=true
 Terminal=false
+# Honoured by GNOME; XFCE ignores it. The script applies its own
+# sleep (DEVMACHINE_TRUST_DELAY) so gvfs-metadata is ready when we
+# call `gio set metadata::*` — without it, writes silently no-op.
+X-GNOME-Autostart-Delay=5

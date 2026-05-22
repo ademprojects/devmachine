@@ -28,25 +28,48 @@ if ! command -v gio >/dev/null 2>&1; then
     exit 0
 fi
 
-shopt -s nullglob
-for f in "$HOME/Desktop"/*.desktop; do
-    # XFCE 4.18+ content-hash trust marker
+# `gio set metadata::*` writes through GVFS' metadata daemon (db in
+# ~/.local/share/gvfs-metadata/). At xrdp-session login the daemon may
+# not be ready yet, in which case the write silently succeeds but the
+# value never lands in the db and xfdesktop still sees no checksum.
+# Wait briefly and verify after each write; retry once if needed.
+
+echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-<unset>}"
+echo "XDG_DATA_HOME=${XDG_DATA_HOME:-<unset>}"
+sleep "${DEVMACHINE_TRUST_DELAY:-5}"
+
+trust_one() {
+    local f="$1"
+    local sum read_sum
     sum=$(sha256sum "$f" | awk '{print $1}')
-    if gio set -t string "$f" metadata::xfce-exe-checksum "$sum"; then
-        echo "set xfce-exe-checksum on $f ($sum)"
-    else
-        echo "FAILED to set xfce-exe-checksum on $f" >&2
-    fi
-    # Legacy / Nautilus attribute — harmless under XFCE 4.18+ but kept for
-    # compatibility with pre-4.18 spins where it was the only check.
-    if gio set -t string "$f" metadata::trusted "true"; then
-        echo "set legacy metadata::trusted on $f"
-    fi
-    # +x is also a requirement for the launcher dialog to skip its prompt
+
+    for attempt in 1 2 3; do
+        gio set -t string "$f" metadata::xfce-exe-checksum "$sum" 2>&1 || true
+        gio set -t string "$f" metadata::trusted "true" 2>&1 || true
+        read_sum=$(gio info -a metadata::xfce-exe-checksum "$f" 2>/dev/null \
+            | sed -n 's/^.*metadata::xfce-exe-checksum: //p')
+        if [ "$read_sum" = "$sum" ]; then
+            echo "trusted $f ($sum)"
+            return 0
+        fi
+        echo "attempt $attempt: gio set didn't stick on $f (saw '$read_sum')" >&2
+        sleep 2
+    done
+    echo "GIVE UP on $f — gvfs-metadata likely not running" >&2
+    return 1
+}
+
+shopt -s nullglob
+ok=1
+for f in "$HOME/Desktop"/*.desktop; do
     chmod +x "$f" 2>/dev/null || true
+    trust_one "$f" || ok=0
 done
 shopt -u nullglob
 
-echo "all done — removing autostart + self"
-rm -f "$AUTOSTART"
-rm -f "$SELF"
+if [ "$ok" -eq 1 ]; then
+    echo "all done — removing autostart + self"
+    rm -f "$AUTOSTART" "$SELF"
+else
+    echo "leaving autostart + self in place so the next session retries" >&2
+fi
