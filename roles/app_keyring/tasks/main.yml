@@ -29,17 +29,24 @@
     state: after
   loop: "{{ app_keyring_pam_targets }}"
 
-- name: Export SSH_AUTH_SOCK from keyring daemon for all login shells
+- name: Export SSH agent + askpass env for all login shells
   ansible.builtin.copy:
     dest: "{{ app_keyring_profile_path }}"
     owner: root
     group: root
     mode: "0644"
     content: |
-      # gnome-keyring's ssh-agent socket; unlocked at login by pam_gnome_keyring
+      # gnome-keyring's ssh-agent socket; unlocked at login by pam_gnome_keyring.
       if [ -n "$XDG_RUNTIME_DIR" ] && [ -S "$XDG_RUNTIME_DIR/keyring/ssh" ]; then
         export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/keyring/ssh"
       fi
+      # GUI askpass helper for ssh-add when launched without a tty (e.g. from
+      # XFCE autostart). SSH_ASKPASS_REQUIRE=prefer makes ssh-add use the
+      # helper even when stdin is a tty, so we get the GUI prompt consistently.
+      if [ -x /usr/libexec/openssh/ssh-askpass ]; then
+        export SSH_ASKPASS=/usr/libexec/openssh/ssh-askpass
+      fi
+      export SSH_ASKPASS_REQUIRE=prefer
 
 - name: Ensure ~/.ssh exists for vm_owner
   ansible.builtin.file:

@@ -22,11 +22,28 @@ if [ ! -r "$KEY" ]; then
     exit 1
 fi
 
-# Force GUI askpass — autostart launches us without a controlling tty.
-export SSH_ASKPASS_REQUIRE=prefer
+# XFCE autostart launches us as a NON-login shell, so /etc/profile.d isn't
+# sourced — SSH_AUTH_SOCK/SSH_ASKPASS would be unset and ssh-add would
+# silently no-op (no agent, no GUI). Source the keyring init explicitly.
+[ -r /etc/profile.d/app-keyring-ssh.sh ] && . /etc/profile.d/app-keyring-ssh.sh
+
+# Fallback: if gnome-keyring's ssh-agent socket isn't up yet (pam_gnome_keyring
+# can fail silently in xrdp sessions), spawn the daemon's ssh component
+# ourselves. `eval` exports SSH_AUTH_SOCK/SSH_AGENT_PID into our env.
+if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK:-/nonexistent}" ]; then
+    echo "no keyring ssh-agent socket — starting gnome-keyring-daemon" >&2
+    eval "$(gnome-keyring-daemon --start --components=ssh 2>/dev/null)" || true
+fi
+
+if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+    echo "WARNING: SSH_AUTH_SOCK still unset — ssh-add will not cache the passphrase" >&2
+fi
+echo "SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>}"
+echo "SSH_ASKPASS=${SSH_ASKPASS:-<unset>}"
+echo "DISPLAY=${DISPLAY:-<unset>}"
 
 # Pre-load the key so we get one askpass prompt instead of one per repo.
-ssh-add "$KEY" </dev/null || true
+ssh-add "$KEY" </dev/null || echo "ssh-add returned non-zero — check the values above" >&2
 
 export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
