@@ -2,3 +2,13 @@
 - name: Reload systemd
   ansible.builtin.systemd:
     daemon_reload: true
+
+# Triggered by any task that touches /tmp mount config (fstab rewrite or
+# tmp.mount drop-in). New mount options only take effect when /tmp is
+# remounted, and live-remounting /tmp while sessions are using it can
+# rip files from underneath running processes — so we reboot instead.
+# Ansible reconnects automatically once SSH is back.
+- name: Reboot to apply tmp mount options
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+    msg: "Ansible: /tmp mount options changed — rebooting to apply"
