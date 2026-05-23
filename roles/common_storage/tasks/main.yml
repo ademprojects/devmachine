@@ -252,7 +252,15 @@
   when: common_storage_tmpdir_path | length == 0
 
 # ---------------------------------------------------------------------------
-# Concern 4: drop noexec from /tmp via tmp.mount drop-in.
+# Concern 4: drop noexec from /tmp.
+# Two paths because /tmp can be backed by either:
+#   a) systemd's tmp.mount unit (RHEL default when tmpfs /tmp is wanted) —
+#      handled by a drop-in under /etc/systemd/system/tmp.mount.d/
+#   b) an explicit /etc/fstab entry (RHEL hardening templates often add one
+#      to enforce noexec/nosuid/nodev) — wins over tmp.mount, so the drop-in
+#      alone wouldn't take effect. Handled by rewriting the fstab line.
+# We apply both, idempotent — whichever one your host actually uses takes
+# effect on reboot.
 # ---------------------------------------------------------------------------
 
 - name: Ensure tmp.mount drop-in directory exists
@@ -289,3 +297,34 @@
     state: absent
   when: not (common_storage_tmp_remove_noexec | bool)
   notify: Reload systemd
+
+# --- /etc/fstab path: only acts if /tmp is actually listed there ----------
+
+- name: Look for an existing /tmp entry in /etc/fstab
+  ansible.builtin.command:
+    cmd: awk '$2 == "/tmp" && $0 !~ /^[[:space:]]*#/ { print; exit }' /etc/fstab
+  register: common_storage_tmp_fstab_line
+  changed_when: false
+  failed_when: false
+
+- name: Rewrite /tmp fstab entry without noexec
+  vars:
+    fields: "{{ common_storage_tmp_fstab_line.stdout.split() }}"
+    cleaned_opts: >-
+      {{ fields[3].split(',') | reject('equalto', 'noexec') | list | join(',') }}
+  ansible.posix.mount:
+    path: /tmp
+    src: "{{ fields[0] }}"
+    fstype: "{{ fields[2] }}"
+    opts: "{{ cleaned_opts }}"
+    dump: "{{ fields[4] | default('0') }}"
+    passno: "{{ fields[5] | default('0') }}"
+    backup: true
+    # state: present updates the fstab line only — no remount. The next
+    # boot picks up the new options. Live remount of /tmp while a session
+    # is using it can yank files from underneath running processes.
+    state: present
+  when:
+    - common_storage_tmp_remove_noexec | bool
+    - common_storage_tmp_fstab_line.stdout | length > 0
+    - "'noexec' in (fields[3] | default(''))"
