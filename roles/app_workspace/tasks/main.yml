@@ -55,6 +55,8 @@
     - local
     - npm
     - pip
+    - node_modules
+    - npm-global
 
 - name: Stat existing ~vm_owner XDG dirs
   ansible.builtin.stat:
@@ -65,8 +67,10 @@
     - .local
     - .npm
     - .pip
+    - node_modules
+    - .npm-global
 
-- name: Refuse to clobber existing real ~/.cache / ~/.local / ~/.npm / ~/.pip directories
+- name: Refuse to clobber existing real XDG / node_modules / .npm-global directories
   ansible.builtin.fail:
     msg: >-
       {{ vm_owner_home }}/{{ item.item }} exists as a real directory
@@ -82,7 +86,12 @@
     - item.stat.isdir
     - not item.stat.islnk
 
-- name: Symlink ~vm_owner XDG dirs to data-disk
+# Note: nvm-managed `npm install -g` ignores the user-level npm prefix and
+# always installs into $NVM_DIR/versions/node/<ver>/lib/node_modules/.
+# The .npm-global symlink only matters when npm is invoked outside nvm
+# (system node, explicit --prefix). It's still wired up because the cost
+# is one symlink and it removes a footgun.
+- name: Symlink ~vm_owner XDG / Node dirs to data-disk
   ansible.builtin.file:
     src: "{{ common_storage_mount_point | default('/mnt/data') }}/{{ item.dest }}"
     dest: "{{ vm_owner_home }}/{{ item.link }}"
@@ -92,9 +101,11 @@
     follow: false
     force: true
   loop:
-    - { link: .cache, dest: cache }
-    - { link: .local, dest: local }
-    - { link: .npm,   dest: npm }
-    - { link: .pip,   dest: pip }
+    - { link: .cache,        dest: cache }
+    - { link: .local,        dest: local }
+    - { link: .npm,          dest: npm }
+    - { link: .pip,          dest: pip }
+    - { link: node_modules,  dest: node_modules }
+    - { link: .npm-global,   dest: npm-global }
   loop_control:
     label: "{{ item.link }} -> {{ item.dest }}"
