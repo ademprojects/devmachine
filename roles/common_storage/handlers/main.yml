@@ -7,8 +7,12 @@
 # tmp.mount drop-in). New mount options only take effect when /tmp is
 # remounted, and live-remounting /tmp while sessions are using it can
 # rip files from underneath running processes — so we reboot instead.
-# Ansible reconnects automatically once SSH is back.
+# Ansible reconnects automatically once SSH is back; reboot_timeout
+# caps the total wait. Inside that window Ansible retries the SSH
+# connection every connect_timeout seconds (default 5s).
 - name: Reboot to apply tmp mount options
   ansible.builtin.reboot:
-    reboot_timeout: 600
+    reboot_timeout: 60       # total wait; one full RHEL boot cycle on virtio fits comfortably
+    pre_reboot_delay: 5      # give shutdown -r time to start tearing down SSH
+    connect_timeout: 5       # per-attempt SSH timeout (default)
     msg: "Ansible: /tmp mount options changed — rebooting to apply"
